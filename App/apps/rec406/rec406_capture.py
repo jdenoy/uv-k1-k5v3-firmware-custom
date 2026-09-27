@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Capture 406 Rec recordings from the radio's programming cable.
+
+Standard library only (termios), 38400 8N1. Every recording is saved as
+  <out>/rec406_<timestamp>.txt   raw text as sent by the app
+  <out>/rec406_<timestamp>.u16   9.6 kHz uint16 samples rebuilt from the 4-bit
+                                 codes (code "comp1": x = c + LEVELS[digit])
+and, if the host decoder is found, decoded straight away.
+
+  rec406_capture.py --port /dev/cu.usbserial-XXXX [--out DIR] [--count N]
+  rec406_capture.py --convert FILE.txt        (rebuild the .u16 from a saved capture)
+
+Close any other program using the port (the app uploader) first.
+"""
+import argparse
+import glob
+import os
+import subprocess
+import sys
+import tempfile
+import termios
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DECODER_SRC = os.path.join(HERE, "..", "epirb406")
+
+
+def open_port(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOCTTY)
+    attrs = termios.tcgetattr(fd)
+    attrs[0] = 0                                        # iflag: raw
+    attrs[1] = 0                                        # oflag
+    attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
+    attrs[3] = 0                                        # lflag: no echo, no canonical
+    attrs[4] = attrs[5] = termios.B38400
+    attrs[6][termios.VMIN] = 1
+    attrs[6][termios.VTIME] = 0
+    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+    termios.tcflush(fd, termios.TCIFLUSH)
+    return fd
+
+
+def lines(fd):
+    buf = b""
+    while True:
+        chunk = os.read(fd, 256)
+        buf += chunk
+        while b"\n" in buf:
+            ln, buf = buf.split(b"\n", 1)
+            yield ln.decode("ascii", "replace").strip()
+
+
+def parse_header(h):
+    t = h.split()
+    kv = {t[i]: t[i + 1] for i in range(2, len(t) - 1, 2)}
+    return {"ver": t[1], **kv}
+
+
+# Reconstruction levels of the app's non-linear 4-bit code "comp1" (ADC LSB from c)
+LEVELS = [-300, -200, -130, -80, -45, -22, -8, 0, 8, 22, 45, 80, 130, 200, 300, 420]
+
+
+def to_u16(header, digits, path):
+    import array
+    if header.get("code") != "comp1":
+        sys.exit("unknown sample code in header: " + str(header.get("code")))
+    c = int(header["c"])
+    a = array.array("H", (max(0, min(4095, c + LEVELS[int(d, 16)])) for d in digits))
+    if sys.byteorder != "little":
+        a.byteswap()
+    with open(path, "wb") as f:
+        a.tofile(f)
+
+
+def decoder():
+    exe = os.path.join(tempfile.gettempdir(), "host_dec406_rec406")   # built outside the repo
+    srcs = [os.path.join(DECODER_SRC, "test", "host_dec406.c"), os.path.join(DECODER_SRC, "dec406.c")]
+    if not os.path.exists(exe) or any(os.path.getmtime(s) > os.path.getmtime(exe) for s in srcs):
+        if subprocess.call(["clang", "-O2", "-o", exe] + srcs) != 0:
+            return None
+    return exe
+
+
+def save(out, header_line, digits):
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    base = os.path.join(out, "rec406_" + stamp)
+    with open(base + ".txt", "w") as f:
+        f.write(header_line + "\n")
+        for i in range(0, len(digits), 100):
+            f.write(digits[i:i + 100] + "\n")
+        f.write("END\n")
+    h = parse_header(header_line)
+    to_u16(h, digits, base + ".u16")
+    print(f"saved {base}.txt / .u16  ({len(digits)} samples, c {h['c']}, rssi {h['rssi']}, clip {h['clip']})")
+    exe = decoder()
+    if exe:
+        subprocess.call([exe, base + ".u16"])
+
+
+def convert(txt):
+    with open(txt) as f:
+        rows = [r.strip() for r in f if r.strip()]
+    h = parse_header(rows[0])
+    digits = "".join(r for r in rows[1:] if r != "END")
+    out = os.path.splitext(txt)[0] + ".u16"
+    to_u16(h, digits, out)
+    print(f"{out}: {len(digits)} samples")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port")
+    ap.add_argument("--out", default=".")
+    ap.add_argument("--count", type=int, default=0, help="stop after N recordings (0 = run until Ctrl-C)")
+    ap.add_argument("--convert")
+    a = ap.parse_args()
+    if a.convert:
+        convert(a.convert)
+        return
+    if not a.port:
+        ports = glob.glob("/dev/cu.usbserial-*")
+        if len(ports) != 1:
+            sys.exit("choose the programming cable with --port, one of: " + ", ".join(ports or ["(none found)"]))
+        a.port = ports[0]
+    os.makedirs(a.out, exist_ok=True)
+    fd = open_port(a.port)
+    print(f"listening on {a.port} (38400 8N1), Ctrl-C to stop")
+    n, header, digits = 0, None, ""
+    try:
+        for ln in lines(fd):
+            if ln.startswith("REC406"):
+                header, digits = ln, ""
+            elif header and ln == "END":
+                save(a.out, header, digits)
+                header, n = None, n + 1
+                if a.count and n >= a.count:
+                    break
+            elif header:
+                digits += ln
+    except KeyboardInterrupt:
+        pass
+    finally:
+        os.close(fd)
+
+
+if __name__ == "__main__":
+    main()
