@@ -36,7 +36,8 @@
  *
  * Keys (UV-K5 and UV-K1): UP/DOWN group · 1 auto-advance · 2 speaker (RAW audio)
  *   3 RAW on/off · 4 ADC probe PB1/PA4 · 5 scope mode (PA4 at 9.6 kHz, clipping
- *   counts; UP/DOWN then step the AF DAC gain, REG_48 bits 3:0) · MENU clear · EXIT.
+ *   counts; UP/DOWN then step the AF DAC gain, REG_48 bits 3:0) · 6 in scope mode:
+ *   PA4 bias on/off (MCU DAC unbuffered at mid-scale) · MENU clear · EXIT.
  * The loader re-runs RADIO_SetupRegisters on exit, so every radio register the
  * probe touches is restored by the firmware; the app restores the ADC itself.
  */
@@ -61,6 +62,11 @@
 #define ADC_DR      (*(volatile uint32_t *)0x40012450u)
 #define GPIOA_MODER (*(volatile uint32_t *)0x50000000u)
 #define DAC_CR      (*(volatile uint32_t *)0x40007400u)
+#define DAC_DHR12R1 (*(volatile uint32_t *)0x40007408u)
+#define RCC_APBENR1 (*(volatile uint32_t *)0x4002103Cu)
+#define RCC_DACEN   (1u << 29)
+#define DAC_EN1_BOFF1 ((1u << 0) | (1u << 1))   /* channel on, output buffer off */
+#define BIAS_CODE   2048u                        /* mid-scale, about VDD/2        */
 #define ADC_SR_EOC       (1u << 1)
 #define ADC_CR2_START    ((1u << 22) | (1u << 20))   /* SWSTART | EXTTRIG */
 #define SMP8_POS         24u
@@ -93,7 +99,8 @@ static const app_api_t *A;
 static st_t     S[CH][2];
 static uint16_t prv[CH];
 static uint16_t adcIdle;
-static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac;
+static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
+static bool     bias;                 /* DAC unbuffered at mid-scale as a weak bias on PA4 */
 static uint8_t  adcCh;                /* 9 = PB1, 4 = PA4 (voice DAC pin) */
 static uint16_t saved2B, saved73, saved48, clipLo, clipHi;
 static uint8_t  dacGain;
@@ -140,11 +147,25 @@ static uint32_t clkCyc(void){ clkUs(); return tCycAll; }
  * every preset, but the DAC is switched off and PA4 set analog while it is read. ---- */
 static void adcSel9(void){
     uint32_t pos=3u*adcCh;
-    if(adcCh==4){ DAC_CR=savedDac&~1u; GPIOA_MODER=savedModer|(3u<<8); }
+    if(adcCh==4){ if(!bias) DAC_CR=savedDac&~1u; GPIOA_MODER=savedModer|(3u<<8); }
     ADC_SMPR3=(savedSmpr3 & ~(7u<<pos)) | (((savedSmpr3>>SMP8_POS)&7u)<<pos);
     ADC_SQR3=(savedSqr3 & ~0x1Fu) | adcCh;
 }
-static void adcRestore(void){ ADC_SQR3=savedSqr3; ADC_SMPR3=savedSmpr3; GPIOA_MODER=savedModer; DAC_CR=savedDac; }
+static void adcRestore(void){ ADC_SQR3=savedSqr3; ADC_SMPR3=savedSmpr3; if(!bias){ GPIOA_MODER=savedModer; DAC_CR=savedDac; } }
+
+/* PA4 floats (AC-coupled audio, no DC path): fast sampling drags it to 0 V. The
+ * DAC with its output buffer off acts as a weak resistor to a fixed voltage. */
+static void setBias(bool on){
+    bias=on;
+    if(on){
+        RCC_APBENR1=savedRcc|RCC_DACEN;
+        GPIOA_MODER=savedModer|(3u<<8);
+        DAC_DHR12R1=BIAS_CODE;
+        DAC_CR=DAC_EN1_BOFF1;
+    } else {
+        DAC_CR=savedDac; DAC_DHR12R1=savedDhr; RCC_APBENR1=savedRcc; GPIOA_MODER=savedModer;
+    }
+}
 static uint16_t adcRead(void){
     ADC_CR2|=ADC_CR2_START;
     for(uint16_t g=0; !(ADC_SR&ADC_SR_EOC) && g<2000u; g++){}
@@ -250,7 +271,7 @@ static void draw(void){
 
     /* rows 1-4: scope summary, or two registers per row (activity A/B) */
     if(scope){
-        o=put(str,"SCOPE PA4 9.6kHz  DAC gain "); o=puti(o,dacGain); row(0,1,o);
+        o=put(str,"SCOPE 9.6k  AF gain "); o=puti(o,dacGain); o=put(o,bias?"  BIAS ON":"  bias off"); row(0,1,o);
         for(uint8_t w=0;w<2 && captured;w++){
             const st_t *st=&S[CH_ADC][w];
             o=put(str,w?"msg ":"car "); o=puti(o,st->mn); *o++='-'; o=puti(o,st->mx);
@@ -295,6 +316,7 @@ static void handleKeys(void){
         case APP_KEY_3:    rawOn=!rawOn; setRaw(); break;
         case APP_KEY_4:    adcCh=(adcCh==9)?4:9; captured=false; break;
         case APP_KEY_5:    scope=!scope; if(scope) adcCh=4; captured=false; break;
+        case APP_KEY_6:    if(scope){ setBias(!bias); captured=false; } break;
         case APP_KEY_MENU: clearAll(); break;
         case APP_KEY_UP:
         case APP_KEY_DOWN: {
@@ -322,6 +344,7 @@ void app_main(const app_api_t *api){
     clearAll();
 
     savedSqr3=ADC_SQR3; savedSmpr3=ADC_SMPR3; savedModer=GPIOA_MODER; savedDac=DAC_CR;
+    savedRcc=RCC_APBENR1; savedDhr=DAC_DHR12R1; bias=false;
     adcCh=9;
     saved2B=A->bk_read(REG_2B); saved73=A->bk_read(REG_73); saved48=A->bk_read(REG_48);
     dacGain=(uint8_t)(saved48&15u); scope=false;
@@ -361,6 +384,7 @@ void app_main(const app_api_t *api){
         A->backlight_update();
     }
 
+    setBias(false);
     adcRestore();
     A->set_af(APP_AF_MUTE);
     A->audio_path(false);

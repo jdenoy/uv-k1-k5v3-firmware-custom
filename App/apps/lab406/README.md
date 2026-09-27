@@ -84,8 +84,29 @@ Keys (UV-K5 and UV-K1): UP/DOWN group (AF DAC gain in scope mode) · 1 auto-adva
 · 2 speaker · 3 RAW on/off · 4 ADC probe PB1/PA4 · 5 scope mode · MENU clear ·
 EXIT quit.
 
+## Scope measurements (UV-K1, generator on 433.650 MHz)
+
+| Setup | Carrier min-max | Message min-max | Message samples at 0 |
+|---|---|---|---|
+| RAW, AF gain 14 | 224-771 | 0-325 | 1082 / 2112 |
+| RAW, AF gain 12 | 18-552 | 0-194 | 1765 / 2112 |
+| RAW off, AF gain 15 | 225-952 | 0-398 | 1284 / 2112 |
+
+At 9.6 kHz the level slides down as soon as fast sampling starts (the carrier
+window drifts by ~500 LSB with almost no modulation) and the message sits on 0 V.
+Polled at ~1.9 kHz (register mode) the same pin read 165-894 around 518, and
+between bursts it reads ~1388. Neither the AF gain nor the chip's 300 Hz
+high-pass (RAW off) removes it, so the cause is on the board, not in the chip.
+
+Hypothesis: PA4 has no firm DC bias (audio reaches it through a coupling
+capacitor), so each ADC conversion takes a little charge and at 9.6 kHz the ADC
+drags the node towards 0 V. Test (v1.3, key 6 in scope mode): the MCU DAC on
+PA4 with its output buffer off, at mid-scale (2048), acts as a weak bias
+resistor to about VDD/2. The DAC clock (RCC APBENR1 bit 29) is enabled by the
+app, and DAC, clock and pin mode are restored on exit.
+
 ## Version
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.2`), since
-the apps menu does not display versions. Current: **v1.2**.
+the apps menu does not display versions. Current: **v1.3**.
