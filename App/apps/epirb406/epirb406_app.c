@@ -24,9 +24,11 @@
  * voice is disabled), held at mid-scale by the MCU DAC (unbuffered) and sampled
  * on ADC channel 4 at 9.6 kHz, timed from
  * SysTick, from the moment RSSI shows a burst. Samples go straight into dec406
- * (see README.md); decoded messages are kept in a short history.
+ * (see README.md); the last decoded message stays on screen.
  *
- * Keys (UV-K5 and UV-K1): UP/DOWN browse history · MENU clear history · EXIT quit. The speaker plays the bursts: lower the volume.
+ * Keys (UV-K5 and UV-K1): UP/DOWN tune +/-5 kHz from the VFO (up to +/-50 kHz,
+ *   while the app runs; direction as set by nav_dir) · 5 back to the VFO frequency
+ *   MENU clear · EXIT quit. The speaker plays the bursts: lower the volume.
  * The loader re-runs RADIO_SetupRegisters on exit; the app restores the ADC,
  * PA4, the DAC and its clock itself.
  */
@@ -70,29 +72,34 @@
 /* ---- BK4829 RAW receive ---- */
 #define REG_2B      0x2B
 #define REG_73      0x73
+#define REG_30      0x30   /* 0 then back: VCO recalibration, relock on the new frequency */
+#define REG_38      0x38   /* RX frequency, 10 Hz units, low 16 bits  */
+#define REG_39      0x39   /* RX frequency, high 16 bits              */
+#define STEP_10HZ   500    /* 5 kHz                                   */
+#define OFF_MAX     10     /* +/- 10 steps = +/- 50 kHz               */
 
 #define TRIG_DB     10
 #define REARM_DB    5
 #define COOL_MS     1500
 #define TICK_MS     50
-#define HIST        2
 
 typedef struct { dec406_info_t in; int16_t rssi; uint8_t seq, inv; } entry_t;
 
 static const app_api_t *A;
 static dec406_t d;
-static entry_t  hist[HIST];
-static uint8_t  nHist, view, seq, prevKey, lastErr;
+static entry_t  last;                  /* last decoded message */
+static uint8_t  have, seq, prevKey, lastErr;
 static uint16_t nSync, nFail;
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
 static int16_t  rssi, burstRssi;
+static int8_t   offSteps;              /* tuning offset from the VFO, 5 kHz steps */
+static uint32_t vfoFreq;               /* VFO RX frequency at launch, 10 Hz units  */
 static int32_t  floorQ;                 /* noise floor, dBm x64 */
 static bool     running;
 static uint32_t tPrev, tCyc;
 static char     str[34];
 
 /* ---- formatting ---- */
-static uint8_t slen(const char *s){ uint8_t n=0; while(s[n])n++; return n; }
 static char *put(char *o,const char *s){ while(*s)*o++=*s++; return o; }
 /* Formatting by repeated subtraction: no division, so no __udivsi3 in the
  * 4 KiB overlay. Values printed stay below 100000. */
@@ -118,6 +125,25 @@ static char *putPos(char *o,int32_t s,char pos,char neg){
 }
 static void tiny(uint8_t x,uint8_t y,char *end){ *end='\0'; A->print_tiny(str,x,y,false,true); }
 static void line(uint8_t l,char *end){ *end='\0'; A->print_normal(str,0,0,l); }
+
+/* ---- tuning: offset the RX frequency from the VFO (restored by the loader on exit) ---- */
+static void tune(void){
+    uint32_t f=(uint32_t)((int32_t)vfoFreq+(int32_t)offSteps*STEP_10HZ);
+    A->bk_write(REG_38,(uint16_t)(f&0xFFFFu));
+    A->bk_write(REG_39,(uint16_t)(f>>16));
+    uint16_t r30=A->bk_read(REG_30);
+    A->bk_write(REG_30,0);
+    A->bk_write(REG_30,r30);
+}
+/* "433.645" from 10 Hz units, rounded to the kHz, without division */
+static char *putFreq(char *o,uint32_t f){
+    uint16_t mhz=0;
+    f+=50u;
+    while(f>=100000u){ f-=100000u; mhz++; }
+    o=puti(o,mhz); *o++='.';
+    *o++=(char)('0'+sub(&f,10000u)); *o++=(char)('0'+sub(&f,1000u)); *o++=(char)('0'+sub(&f,100u));
+    return o;
+}
 
 /* ---- SysTick cycle counter (call at least every 10 ms) ---- */
 static void clkStart(void){ tPrev=SYST_VAL; tCyc=0; }
@@ -170,11 +196,9 @@ static void capture(void){
 
     if(!done){ nFail++; lastErr = d.state==DEC406_DATA ? 2u : 1u; return; }  /* 1 no sync, 2 cut */
     nSync++; lastErr=0;
-    for(uint8_t i=HIST-1u;i>0;i--) hist[i]=hist[i-1u];
-    dec406_parse(&d,&hist[0].in);
-    hist[0].rssi=burstRssi; hist[0].seq=++seq; hist[0].inv=d.inv;
-    if(nHist<HIST) nHist++;
-    view=0;
+    dec406_parse(&d,&last.in);
+    last.rssi=burstRssi; last.seq=++seq; last.inv=d.inv;
+    have=1;
 }
 
 /* ---- display ---- */
@@ -185,21 +209,16 @@ static void draw(void){
     A->print_inverse(TITLE,2,0,true,true,(uint8_t)(2u+(sizeof(TITLE)-1u)*4u));
     A->draw_battery();
 
-    if(!nHist){
+    if(!have){
         o=put(str,"Waiting..."); line(1,o);
     } else {
-        const entry_t *e=&hist[view];
+        const entry_t *e=&last;
         const dec406_info_t *in=&e->in;
         o=put(str,in->id); line(0,o);                                   /* 15-hex ID */
         o=puti(str,in->country); *o++=' '; o=put(o,dec406_proto_name(in)); line(1,o);
         if(in->hasPos){ o=putPos(str,in->latS,'N','S'); *o++=' '; o=putPos(o,in->lonS,'E','W'); }
         else o=put(str,"no position");
         line(2,o);
-
-        /* raw end of the last received frame (bits 105-144), for bench diagnosis */
-        o=put(str,"END ");
-        for(uint8_t i=10;i<15;i++){ *o++=HX[d.bits[i]>>4]; *o++=HX[d.bits[i]&15u]; }
-        tiny(0,26,o);
 
         o=put(str,in->selftest?"SELF-TEST ":"");
         o=put(o,in->longMsg?"LONG":"SHORT");
@@ -212,11 +231,14 @@ static void draw(void){
         tiny(0,40,o);
     }
 
+    o=putFreq(str,vfoFreq+(uint32_t)((int32_t)offSteps*STEP_10HZ));
+    if(offSteps){ *o++=' '; if(offSteps>0) *o++='+'; o=puti(o,(int32_t)offSteps*5); o=put(o," kHz"); }
+    tiny(0,26,o);
+
     o=puti(str,rssi); *o++='/'; o=puti(o,floorQ/64); o=put(o,"dBm ok"); o=puti(o,nSync);
     o=put(o," err"); o=puti(o,nFail);
     if(lastErr) o=put(o,lastErr==1u?" nosync":" cut");
     tiny(0,48,o);
-    if(nHist){ o=puti(str,view+1u); *o++='/'; o=puti(o,nHist); tiny((uint8_t)(127u-slen(str)*4u),33,o); }
 }
 
 /* ---- input ---- */
@@ -227,11 +249,13 @@ static void handleKeys(void){
     A->backlight_on();
     switch(key){
         case APP_KEY_EXIT: running=false; break;
-        case APP_KEY_MENU: nHist=0; view=0; nSync=nFail=0; lastErr=0; break;
+        case APP_KEY_5:    offSteps=0; tune(); break;
+        case APP_KEY_MENU: have=0; nSync=nFail=0; lastErr=0; break;
         case APP_KEY_UP:
-        case APP_KEY_DOWN:
-            if(nHist){ if(A->nav_dir(key)>0) view=view?(uint8_t)(view-1u):(uint8_t)(nHist-1u); else view=(uint8_t)(view+1u<nHist?view+1u:0u); }
-            break;
+        case APP_KEY_DOWN: {
+            int8_t n=(int8_t)(offSteps+A->nav_dir(key));
+            if(n>=-OFF_MAX && n<=OFF_MAX){ offSteps=n; tune(); }
+            break; }
         default: break;
     }
 }
@@ -246,12 +270,13 @@ static void cooldown(void){
 __attribute__((section(".text.entry"),used))
 void app_main(const app_api_t *api){
     A=api;
-    nHist=view=seq=0; nSync=nFail=0; lastErr=0; prevKey=APP_KEY_INVALID;
+    have=seq=0; offSteps=0; nSync=nFail=0; lastErr=0; prevKey=APP_KEY_INVALID;
 
     savedSqr3=ADC_SQR3; savedSmpr3=ADC_SMPR3; savedModer=GPIOA_MODER; savedDac=DAC_CR;
     savedRcc=RCC_APBENR1; savedDhr=DAC_DHR12R1;
     biasOn();
     A->backlight_on();
+    vfoFreq=A->rx_freq();
     A->bk_write(REG_2B,(uint16_t)((A->bk_read(REG_2B)|0x0700u)&~0x0007u));
     A->bk_write(REG_73,(uint16_t)(A->bk_read(REG_73)|0x0010u));
     A->audio_path(true);

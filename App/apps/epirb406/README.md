@@ -23,26 +23,39 @@ Status:
    speaker plays each burst.
 
 Each burst is detected on RSSI (10 dB above the floor), sampled for up to 900 ms
-and decoded. The last 2 decoded messages are kept.
+and decoded. The last decoded message stays on screen (the 2-message history was
+dropped in v1.5 to make room for tuning).
 
 | Screen | Content |
 |---|---|
 | Line 0 | 15-hex ID |
 | Line 1 | Country code and protocol |
 | Line 2 | Position (5 decimals, truncated) or "no position" |
-| Line 3 | `END` + raw bits 105-144 of the last frame received, in hex (bench diagnosis) |
-| Small rows | SELF-TEST, LONG/SHORT, BCH-1/BCH-2; `#` decode number, RSSI of the burst, internal/external position source, 121.5 homing, `coarse` (no PDF-2 offsets), `rawID` (not a standard location protocol, ID = raw bits 26-85); `1/2` history position |
+| Line 3 | Tuned frequency and offset from the VFO, e.g. `433.645 -5 kHz` (v1.5; up to v1.4: `END` + raw bits 105-144) |
+| Small rows | SELF-TEST, LONG/SHORT, BCH-1/BCH-2; `#` decode number, RSSI of the burst, internal/external position source, 121.5 homing, `coarse` (no PDF-2 offsets), `rawID` (not a standard location protocol, ID = raw bits 26-85) |
 | Bottom row | RSSI / floor, decodes ok, errors, last error: `nosync` (no frame sync found) or `cut` (sync found, message incomplete) |
 
-Keys (UV-K5 and UV-K1): UP/DOWN browse history · MENU clear · EXIT quit. The
-backlight stays on while the app runs (since v1.4), so bursts can be watched. The
+Keys (UV-K5 and UV-K1):
+
+| Key | Action |
+|---|---|
+| UP / DOWN | Tune ±5 kHz from the VFO, up to ±50 kHz (direction follows the firmware's navigation setting, so K1 LEFT/RIGHT work as on the main screen) |
+| 5 | Back to the VFO frequency |
+| MENU | Clear the last message and the counters |
+| EXIT | Quit (the firmware retunes to the VFO frequency) |
+
+Tuning writes the BK4829 frequency registers (0x38/0x39, 10 Hz units) and
+restarts the synthesizer (REG_30 to 0, then back) so it relocks; it only lasts
+while the app runs. Useful when the carrier sits near the edge of the channel: on
+the bench, the full frame was only received with the K1 5 kHz below the
+generator. The backlight stays on while the app runs (since v1.4). The
 decoder integrates the discriminator pulses (INT); the INT/DIR toggle of v1.1-v1.2
 (key 1) was removed in v1.3 once INT was proven on the radio.
 
-Space: the app uses 4,068 of the 4,096 bytes (v1.4). To make it fit, the sync search
+Space: the app uses 4,052 of the 4,096 bytes (v1.5). To make it fit, the sync search
 compares 32-bit words (the inverted-polarity distance is 44 minus the normal
 one), number formatting uses subtraction instead of division (no `__udivsi3`),
-protocol names are packed in one string, the history holds 2 entries, and the
+protocol names are packed in one string, only the last message is kept, and the
 app is built with `-fno-jump-tables` (48 bytes saved on the key `switch`).
 
 ## Signal path on the radio
@@ -258,4 +271,4 @@ a real bias reproduced on the host at the measured level.
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.1`), since
-the apps menu does not display versions. Current: **v1.4**.
+the apps menu does not display versions. Current: **v1.5**.
