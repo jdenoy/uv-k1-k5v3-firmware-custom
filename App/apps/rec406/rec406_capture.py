@@ -15,6 +15,7 @@ Close any other program using the port (the app uploader) first.
 import argparse
 import glob
 import os
+import select
 import subprocess
 import sys
 import tempfile
@@ -26,7 +27,9 @@ DECODER_SRC = os.path.join(HERE, "..", "epirb406")
 
 
 def open_port(path):
-    fd = os.open(path, os.O_RDONLY | os.O_NOCTTY)
+    # O_NONBLOCK: on macOS a blocking open/read of a tty can wait on the modem
+    # lines; the first version of this script received nothing that way
+    fd = os.open(path, os.O_RDONLY | os.O_NOCTTY | os.O_NONBLOCK)
     attrs = termios.tcgetattr(fd)
     attrs[0] = 0                                        # iflag: raw
     attrs[1] = 0                                        # oflag
@@ -43,8 +46,10 @@ def open_port(path):
 def lines(fd):
     buf = b""
     while True:
-        chunk = os.read(fd, 256)
-        buf += chunk
+        r, _, _ = select.select([fd], [], [], 1.0)
+        if not r:
+            continue
+        buf += os.read(fd, 4096)
         while b"\n" in buf:
             ln, buf = buf.split(b"\n", 1)
             yield ln.decode("ascii", "replace").strip()
@@ -101,7 +106,7 @@ def convert(txt):
     with open(txt) as f:
         rows = [r.strip() for r in f if r.strip()]
     h = parse_header(rows[0])
-    digits = "".join(r for r in rows[1:] if r != "END")
+    digits = "".join(r[:-3] if r.endswith("END") else r for r in rows[1:])
     out = os.path.splitext(txt)[0] + ".u16"
     to_u16(h, digits, out)
     print(f"{out}: {len(digits)} samples")
@@ -113,6 +118,7 @@ def main():
     ap.add_argument("--out", default=".")
     ap.add_argument("--count", type=int, default=0, help="stop after N recordings (0 = run until Ctrl-C)")
     ap.add_argument("--convert")
+    ap.add_argument("--debug", action="store_true", help="print every received line (first 60 chars)")
     a = ap.parse_args()
     if a.convert:
         convert(a.convert)
@@ -127,10 +133,17 @@ def main():
     print(f"listening on {a.port} (38400 8N1), Ctrl-C to stop")
     n, header, digits = 0, None, ""
     try:
+        nb = 0
         for ln in lines(fd):
+            nb += len(ln) + 1
+            if a.debug:
+                print(f"[{nb:6d}] {ln[:60]!r}", flush=True)
             if ln.startswith("REC406"):
                 header, digits = ln, ""
-            elif header and ln == "END":
+            elif header and ln.endswith("END"):
+                # 406 Rec v1.0 sends no line break after the last, partial line
+                # (4260 = 42 x 100 + 60), so END arrives glued to it
+                digits += ln[:-3]
                 save(a.out, header, digits)
                 header, n = None, n + 1
                 if a.count and n >= a.count:

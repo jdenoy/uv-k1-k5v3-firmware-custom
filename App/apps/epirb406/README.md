@@ -203,6 +203,24 @@ The test suite now has 12 more cases at the measured level (CNR 12 dB, ±2%
 clock, 4 noise seeds each): the old decoder fails 6 of them with the radio's
 symptom, the fixed one passes all 29.
 
+**Recordings from the radio (406 Rec, 2026-09-27).** Three bursts recorded
+on the K1 and decoded on the host give exactly the radio's result (sync found,
+polarity inverted, ID correct, BCH FAIL/FAIL). Activity per 10 ms shows carrier
+until 150 ms after the trigger, modulation until **410 ms**, then noise: the
+carrier is gone. 260 ms of modulation instead of 360 ms, so only ~104 of the 144
+bits are on air, at the same point on every burst; the bit rate itself is exact
+(the preamble pattern repeats every 24 samples at 9.6 kHz). A synthetic burst cut
+after 106 bits decodes as BCH ok/FAIL (the v1.2 result) and after 104 bits as
+FAIL/FAIL with the correct ID (the v1.4 result). **The bench generator (rpitx
+playing the IQ file) drops the last ~100 ms of the burst**; the decoder is not at
+fault for the end of the frame. Fix on the generator side: pad the IQ file with
+at least 150 ms of carrier after the last bit. The recordings are kept outside
+the repo in `~/dev/uv-k1-406-captures`.
+
+The earlier fixes stand on their own: the PA4 bias (v1.2) removed the clipping
+that caused the "every 1 after a 0" errors, and the DC tracker rounding (v1.4) is
+a real bias reproduced on the host at the measured level.
+
 ## Open points
 
 - **Default position pattern** in the 15-hex ID (`0 1111111 11 0 11111111 11`)

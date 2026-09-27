@@ -47,6 +47,11 @@ END
 
 `rec406_capture.py --convert FILE.txt` rebuilds the `.u16` from a saved capture.
 
+Note: v1.0 sends no line break after the last, partial data line (4260 =
+42 x 100 + 60), so `END` arrives glued to it; the capture script handles it. The
+port is opened non-blocking: a blocking open on macOS received nothing. `--debug`
+prints every received line.
+
 Keys (UV-K5 and UV-K1): 1 resend · EXIT quit. The backlight stays on.
 
 ## Version
