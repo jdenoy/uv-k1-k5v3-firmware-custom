@@ -10,8 +10,8 @@ Status:
 |---|---|
 | Feasibility: can an app read the demodulated signal? | **Done**: yes, on PA4 (see `../lab406/README.md`) |
 | Decoder core (`dec406.c`), host-tested on synthetic audio | **Done**: 17/17 tests pass |
-| Radio app (`epirb406_app.c`: trigger, sampling, display) | v1.4: PA4 bias fix (v1.2), DC tracker rounding fix (v1.4); bench retest pending |
-| Bench test with the beacon generator on 433.650 MHz | To do |
+| Radio app (`epirb406_app.c`: trigger, sampling, display) | **v1.4 decodes the full reference frame on the K1** (position, `END F58521EDA3`) |
+| Bench test with the beacon generator on 433.650 MHz | **Done** (2026-09-27) |
 
 ## Using the app
 
@@ -216,6 +216,19 @@ playing the IQ file) drops the last ~100 ms of the burst**; the decoder is not a
 fault for the end of the frame. Fix on the generator side: pad the IQ file with
 at least 150 ms of carrier after the last bit. The recordings are kept outside
 the repo in `~/dev/uv-k1-406-captures`.
+
+**Correction.** The generator is not at fault: an RTL-SDR on the Mac decodes the
+full burst on air. 406 Rec v1.1 (RSSI every 10 ms) showed RSSI falling to the
+noise floor (about -93 dBm) 410-420 ms after the trigger on every burst: the
+signal left the K1's channel, most likely a frequency move of the rpitx carrier
+near the end of the burst that a wideband RTL-SDR decoder follows and a 25 kHz
+channel does not. (The RSSI read during fast sampling showed a constant -21 dBm,
+not the -64 to -75 dBm of the trigger; only its change is meaningful. v1.1 is a
+diagnostic build: the RSSI reads disturb the sample timing.)
+
+**Full decode on the radio (2026-09-27).** EPIRB 406 v1.4 then decoded the whole
+reference frame: ID `1C7C2468ACFFBFF`, country 227, "Std test", position
+49.27111 N 0.78222 E, `END F58521EDA3` (all 144 bits intact, BCH-2 ok).
 
 The earlier fixes stand on their own: the PA4 bias (v1.2) removed the clipping
 that caused the "every 1 after a 0" errors, and the DC tracker rounding (v1.4) is
