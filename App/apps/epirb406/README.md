@@ -226,9 +226,15 @@ channel does not. (The RSSI read during fast sampling showed a constant -21 dBm,
 not the -64 to -75 dBm of the trigger; only its change is meaningful. v1.1 is a
 diagnostic build: the RSSI reads disturb the sample timing.)
 
-**Full decode on the radio (2026-09-27).** EPIRB 406 v1.4 then decoded the whole
+**Full decode on the radio (2026-09-27).** With the K1 VFO **5 kHz below** the
+generator frequency (433.645 MHz for 433.650), EPIRB 406 v1.4 decoded the whole
 reference frame: ID `1C7C2468ACFFBFF`, country 227, "Std test", position
-49.27111 N 0.78222 E, `END F58521EDA3` (all 144 bits intact, BCH-2 ok).
+49.27111 N 0.78222 E, `END F58521EDA3` (all 144 bits intact, BCH-2 ok). This confirms the explanation above: at
+433.650 the rpitx carrier moves down near the end of the burst and leaves the
+channel; 5 kHz lower, it stays inside. A steady carrier offset only shifts the
+discriminator's DC level, which the decoder removes. Real first-generation
+beacons have far more stable oscillators, but the offset matters there too: one
+VFO at 406.031 MHz with the wide filter must cover 406.025-406.040.
 
 The earlier fixes stand on their own: the PA4 bias (v1.2) removed the clipping
 that caused the "every 1 after a 0" errors, and the DC tracker rounding (v1.4) is
