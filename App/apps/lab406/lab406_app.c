@@ -35,7 +35,7 @@
  * is probed (16 groups cover 0x00-0x7F; 0x5F, the FSK FIFO, is never read).
  *
  * Keys (UV-K5 and UV-K1): UP/DOWN group · 1 auto-advance · 2 speaker (RAW audio)
- *   3 RAW on/off · 4 ADC probe PB1/PA4 · 5 scope mode (PA4 at 9.6 kHz, clipping
+ *   3 RAW on/off · 5 scope mode (PA4 at 9.6 kHz, clipping
  *   counts; UP/DOWN then step the AF DAC gain, REG_48 bits 3:0) · 6 in scope mode:
  *   PA4 bias on/off (MCU DAC unbuffered at mid-scale) · MENU clear · EXIT.
  * The loader re-runs RADIO_SetupRegisters on exit, so every radio register the
@@ -65,7 +65,10 @@
 #define DAC_DHR12R1 (*(volatile uint32_t *)0x40007408u)
 #define RCC_APBENR1 (*(volatile uint32_t *)0x4002103Cu)
 #define RCC_DACEN   (1u << 29)
-#define DAC_EN1_BOFF1 ((1u << 0) | (1u << 1))   /* channel on, output buffer off */
+#define DAC_SWTRIGR (*(volatile uint32_t *)0x40007404u)
+#define DAC_DOR1    (*(volatile uint32_t *)0x4000742Cu)
+/* channel on, output buffer off, trigger enabled with TSEL1 = software (111) */
+#define DAC_CR_BIAS ((1u << 0) | (1u << 1) | (1u << 2) | (7u << 3))
 #define BIAS_CODE   2048u                        /* mid-scale, about VDD/2        */
 #define ADC_SR_EOC       (1u << 1)
 #define ADC_CR2_START    ((1u << 22) | (1u << 20))   /* SWSTART | EXTTRIG */
@@ -160,8 +163,9 @@ static void setBias(bool on){
     if(on){
         RCC_APBENR1=savedRcc|RCC_DACEN;
         GPIOA_MODER=savedModer|(3u<<8);
+        DAC_CR=DAC_CR_BIAS;
         DAC_DHR12R1=BIAS_CODE;
-        DAC_CR=DAC_EN1_BOFF1;
+        DAC_SWTRIGR=1u;                         /* DHR -> DOR */
     } else {
         DAC_CR=savedDac; DAC_DHR12R1=savedDhr; RCC_APBENR1=savedRcc; GPIOA_MODER=savedModer;
     }
@@ -271,7 +275,7 @@ static void draw(void){
 
     /* rows 1-4: scope summary, or two registers per row (activity A/B) */
     if(scope){
-        o=put(str,"SCOPE 9.6k  AF gain "); o=puti(o,dacGain); o=put(o,bias?"  BIAS ON":"  bias off"); row(0,1,o);
+        o=put(str,"SCOPE 9.6k  AF gain "); o=puti(o,dacGain); if(bias){ o=put(o," BIAS dor "); o=puti(o,(int32_t)(DAC_DOR1&0xFFFu)); } else o=put(o," bias off"); row(0,1,o);
         for(uint8_t w=0;w<2 && captured;w++){
             const st_t *st=&S[CH_ADC][w];
             o=put(str,w?"msg ":"car "); o=puti(o,st->mn); *o++='-'; o=puti(o,st->mx);
@@ -314,7 +318,6 @@ static void handleKeys(void){
         case APP_KEY_1:    autoAdv=!autoAdv; break;
         case APP_KEY_2:    speaker=!speaker; setSpeaker(); break;
         case APP_KEY_3:    rawOn=!rawOn; setRaw(); break;
-        case APP_KEY_4:    adcCh=(adcCh==9)?4:9; captured=false; break;
         case APP_KEY_5:    scope=!scope; if(scope) adcCh=4; captured=false; break;
         case APP_KEY_6:    if(scope){ setBias(!bias); captured=false; } break;
         case APP_KEY_MENU: clearAll(); break;
@@ -345,7 +348,7 @@ void app_main(const app_api_t *api){
 
     savedSqr3=ADC_SQR3; savedSmpr3=ADC_SMPR3; savedModer=GPIOA_MODER; savedDac=DAC_CR;
     savedRcc=RCC_APBENR1; savedDhr=DAC_DHR12R1; bias=false;
-    adcCh=9;
+    adcCh=4;                              /* PB1 (ch 9) is tied low: PA4 only */
     saved2B=A->bk_read(REG_2B); saved73=A->bk_read(REG_73); saved48=A->bk_read(REG_48);
     dacGain=(uint8_t)(saved48&15u); scope=false;
     A->backlight_on();

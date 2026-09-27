@@ -81,8 +81,8 @@ does not clip. The TOP ranking of the register scan was removed to make room;
 the scan itself is unchanged.
 
 Keys (UV-K5 and UV-K1): UP/DOWN group (AF DAC gain in scope mode) · 1 auto-advance
-· 2 speaker · 3 RAW on/off · 4 ADC probe PB1/PA4 · 5 scope mode · MENU clear ·
-EXIT quit.
+· 2 speaker · 3 RAW on/off · 5 scope mode · 6 PA4 bias (scope mode) · MENU clear
+· EXIT quit. (Key 4, PB1/PA4 probe, existed up to v1.3.)
 
 ## Scope measurements (UV-K1, generator on 433.650 MHz)
 
@@ -105,8 +105,16 @@ PA4 with its output buffer off, at mid-scale (2048), acts as a weak bias
 resistor to about VDD/2. The DAC clock (RCC APBENR1 bit 29) is enabled by the
 app, and DAC, clock and pin mode are restored on exit.
 
+v1.3 result (RAW, AF gain 14): bias on, carrier 0-2, message 0-144, 1163 at 0;
+bias off, carrier 210-767, message 0-323, 989 at 0. The DAC pulled PA4 to 0 V
+instead of mid-scale: the value written before enabling the channel was most
+likely not transferred to the output. It also shows how weak the PA4 node is.
+v1.4 enables the channel in software-trigger mode, writes 2048, triggers the
+transfer, and shows the DAC output register (`dor`) in row 1 to confirm it.
+The PB1 option (key 4) was removed to make room: PB1 is tied low.
+
 ## Version
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.2`), since
-the apps menu does not display versions. Current: **v1.3**.
+the apps menu does not display versions. Current: **v1.4**.
