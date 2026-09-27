@@ -10,8 +10,37 @@ Status:
 |---|---|
 | Feasibility: can an app read the demodulated signal? | **Done**: yes, on PA4 (see `../lab406/README.md`) |
 | Decoder core (`dec406.c`), host-tested on synthetic audio | **Done**: 17/17 tests pass |
-| Radio app (sampling, trigger, display) | To do |
+| Radio app (`epirb406_app.c`: trigger, sampling, display) | **Built** (4,024 B of 4 KiB), not yet run on the radio |
 | Bench test with the beacon generator on 433.650 MHz | To do |
+
+## Using the app
+
+1. Set the VFO to the beacon frequency, **FM, wide bandwidth**: 406.031 MHz for
+   real beacons, or the generator frequency (433.650 MHz on the bench).
+2. Launch **EPIRB 406** with no burst in progress: the noise floor is measured at
+   launch.
+3. Lower the volume: the RX audio must stay on (it is what reaches PA4), so the
+   speaker plays each burst.
+
+Each burst is detected on RSSI (10 dB above the floor), sampled for up to 900 ms
+and decoded. The last 2 decoded messages are kept.
+
+| Screen | Content |
+|---|---|
+| Line 0 | 15-hex ID |
+| Line 1 | Country code and protocol |
+| Line 2 | Position (5 decimals, truncated) or "no position" |
+| Small rows | SELF-TEST, LONG/SHORT, BCH-1/BCH-2; `#` decode number, RSSI of the burst, internal/external position source, 121.5 homing, `coarse` (no PDF-2 offsets), `rawID` (not a standard location protocol, ID = raw bits 26-85); `1/2` history position; `INT`/`DIR` input mode |
+| Bottom row | RSSI / floor, decodes ok, errors, last error: `nosync` (no frame sync found) or `cut` (sync found, message incomplete) |
+
+Keys (UV-K5 and UV-K1): UP/DOWN browse history · 1 input mode `INT` (integrate
+the discriminator pulses, default) / `DIR` (use the input as is, in case the
+audio circuit already integrates) · MENU clear · EXIT quit.
+
+Space: the app uses 4,024 of the 4,096 bytes. To make it fit, the sync search
+compares 32-bit words (the inverted-polarity distance is 44 minus the normal
+one), number formatting uses subtraction instead of division (no `__udivsi3`),
+protocol names are packed in one string, and the history holds 2 entries.
 
 ## Signal path on the radio
 
@@ -73,9 +102,8 @@ freestanding (no libc). About 150 bytes of state.
 6. **Parsing**: BCH-1 and BCH-2 syndromes, country, protocol, 15-hex ID, position
    for standard location protocols (coarse + fine offsets).
 
-Size for Cortex-M0+ (`-Os`): 2,233 bytes of code. With sampling and display the
-app should be around 3.5 of the 4 KiB overlay. If space runs short: drop the user
-protocol name table, or shorten the names.
+Size for Cortex-M0+ (firmware toolchain, `-Os`): 1,468 bytes of code, after the
+size work described above.
 
 ## Tests (`test/`)
 

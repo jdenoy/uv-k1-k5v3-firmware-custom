@@ -16,7 +16,7 @@ SELF=$(python3 "$HERE/frame406.py" --selftest)
 SHORT=$(python3 "$HERE/frame406.py" --short)
 FLIP=$(python3 "$HERE/frame406.py" --flip 50)
 
-REF_LONG=("long (144 bits), normal frame" "country   : 227" "Std loc test" "0x123456"
+REF_LONG=("long (144 bits), normal frame" "country   : 227" "Std test" "0x123456"
           "position  : 49.27111, 0.78222" "external, homing yes" "BCH       : ok / ok"
           "15-hex ID : 1C7C2468ACFFBFF" "frames    : 1")
 

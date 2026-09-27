@@ -45,7 +45,7 @@ typedef struct {
     int32_t  acc;             /* sum of lvl over the current half-bit slot      */
     int32_t  h1;              /* first half of the bit being received           */
     int32_t  ph;              /* position in the half-bit slot, Q8              */
-    uint64_t hsr;             /* last 64 half-bit signs, newest in bit 0        */
+    uint32_t hsrHi, hsrLo;    /* last 64 half-bit signs, newest in hsrLo bit 0  */
     uint8_t  state, half, inv, selftest, integrate, sign, nbits, total;
     uint8_t  bits[15];        /* message bits 25..144, MSB first                */
 } dec406_t;

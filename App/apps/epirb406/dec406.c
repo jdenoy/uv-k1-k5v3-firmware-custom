@@ -23,10 +23,13 @@
 #define PLL_SHR   3     /* zero-crossing correction gain 1/8                    */
 #define SYNC_TOL  2     /* half-bit mismatches allowed in preamble + sync       */
 
-/* 13 preamble ones + frame sync, as half-bit signs (1 = "10", 0 = "01") */
-#define PAT_MASK     0x00000FFFFFFFFFFFull              /* 44 half-bits          */
-#define PAT_NORMAL   0x00000AAAAAA959AAull              /* sync 000101111       */
-#define PAT_SELFTEST 0x00000AAAAAA9A655ull              /* sync 011010000       */
+/* 13 preamble ones + frame sync, as 44 half-bit signs (1 = "10", 0 = "01"),
+ * split in a 12-bit high part and a 32-bit low part */
+#define PAT_BITS     44u
+#define PAT_HI_MASK  0xFFFu
+#define PAT_HI       0xAAAu                               /* same for both syncs */
+#define PAT_NORMAL   0xAAA959AAu                          /* sync 000101111      */
+#define PAT_SELFTEST 0xAAA9A655u                          /* sync 011010000      */
 
 /* BCH generators (C/S T.001): PDF-1 BCH(82,61), PDF-2 BCH(26,14) */
 #define BCH1_GEN  0x26D9E3u    /* x^21+x^18+x^17+x^15+x^14+x^12+x^11+x^8+x^7+x^6+x^5+x+1 */
@@ -37,11 +40,26 @@
  * against T.001. */
 #define STD_DEFAULT_POS  0x0FFBFFu   /* 0 1111111 11 0 11111111 11 */
 
-static uint8_t popc64(uint64_t x){ uint8_t n=0; while(x){ x&=x-1u; n++; } return n; }
+static uint8_t popc32(uint32_t x)
+{
+    x = x - ((x >> 1) & 0x55555555u);
+    x = (x & 0x33333333u) + ((x >> 2) & 0x33333333u);
+    return (uint8_t)((((x + (x >> 4)) & 0x0F0F0F0Fu) * 0x01010101u) >> 24);
+}
+
+/* Match the last 44 half-bits against one sync pattern in both polarities:
+ * returns 1 (normal), 2 (inverted) or 0. Inverted distance = 44 - distance. */
+static uint8_t match(const dec406_t *d, uint32_t lo)
+{
+    uint8_t n = (uint8_t)(popc32((d->hsrHi ^ PAT_HI) & PAT_HI_MASK) + popc32(d->hsrLo ^ lo));
+    if (n <= SYNC_TOL) return 1;
+    if (n >= PAT_BITS - SYNC_TOL) return 2;
+    return 0;
+}
 
 void dec406_rearm(dec406_t *d)
 {
-    d->lvl = 0; d->acc = 0; d->h1 = 0; d->ph = 0; d->hsr = 0;
+    d->lvl = 0; d->acc = 0; d->h1 = 0; d->ph = 0; d->hsrHi = d->hsrLo = 0;
     d->state = DEC406_SEARCH; d->half = 0; d->inv = 0; d->selftest = 0;
     d->sign = 0; d->nbits = 0; d->total = 0;
     for (uint8_t i = 0; i < sizeof d->bits; i++) d->bits[i] = 0;
@@ -62,16 +80,16 @@ static void putBit(dec406_t *d, uint8_t b)
 
 static void emitHalf(dec406_t *d, int32_t h)
 {
-    d->hsr = (d->hsr << 1) | (h > 0 ? 1u : 0u);
+    d->hsrHi = (d->hsrHi << 1) | (d->hsrLo >> 31);
+    d->hsrLo = (d->hsrLo << 1) | (h > 0 ? 1u : 0u);
 
     if (d->state == DEC406_SEARCH) {
-        uint64_t x = d->hsr & PAT_MASK;
-        uint8_t  hit = 0;
-        if      (popc64(x ^ PAT_NORMAL)                  <= SYNC_TOL) { hit = 1; d->inv = 0; d->selftest = 0; }
-        else if (popc64(x ^ (~PAT_NORMAL & PAT_MASK))    <= SYNC_TOL) { hit = 1; d->inv = 1; d->selftest = 0; }
-        else if (popc64(x ^ PAT_SELFTEST)                <= SYNC_TOL) { hit = 1; d->inv = 0; d->selftest = 1; }
-        else if (popc64(x ^ (~PAT_SELFTEST & PAT_MASK))  <= SYNC_TOL) { hit = 1; d->inv = 1; d->selftest = 1; }
-        if (hit) { d->state = DEC406_DATA; d->half = 0; d->nbits = 0; }
+        uint8_t m = match(d, PAT_NORMAL), st = 0;
+        if (!m) { m = match(d, PAT_SELFTEST); st = 1; }
+        if (m) {
+            d->inv = (uint8_t)(m - 1u); d->selftest = st;
+            d->state = DEC406_DATA; d->half = 0; d->nbits = 0;
+        }
         return;
     }
 
@@ -204,12 +222,15 @@ void dec406_parse(const dec406_t *d, dec406_info_t *o)
 
 const char *dec406_proto_name(const dec406_info_t *in)
 {
-    static const char *const LOC[16] = {
-        "Loc 0000", "Loc 0001", "EPIRB MMSI", "ELT 24-bit", "ELT serial", "ELT op desig",
-        "EPIRB serial", "PLB serial", "Nat ELT", "ELT-DT", "Nat EPIRB", "Nat PLB",
-        "Ship security", "RLS", "Std loc test", "Nat loc test" };
-    static const char *const USR[8] = {
-        "Orbitography", "ELT aviation", "Maritime", "Serial user",
-        "National user", "User spare", "Radio callsign", "Test user" };
-    return in->userProto ? USR[in->proto & 7u] : LOC[in->proto & 15u];
+    /* 16 location protocol names (bits 37-40), then 8 user protocol names
+     * (bits 37-39), packed to avoid a pointer table */
+    static const char NAMES[] =
+        "Loc 0000\0Loc 0001\0EPIRB MMSI\0ELT 24bit\0ELT serial\0ELT opdes\0"
+        "EPIRB ser\0PLB serial\0Nat ELT\0ELT-DT\0Nat EPIRB\0Nat PLB\0"
+        "Ship sec\0RLS\0Std test\0Nat test\0"
+        "Orbito\0ELT avia\0Maritime\0Serial\0National\0Spare\0Callsign\0User test";
+    uint8_t n = in->userProto ? (uint8_t)(16u + (in->proto & 7u)) : (uint8_t)(in->proto & 15u);
+    const char *p = NAMES;
+    while (n--) { while (*p) p++; p++; }
+    return p;
 }
