@@ -4,8 +4,8 @@
 Chain: biphase-L frame -> +/-1.1 rad phase with raised-cosine transitions ->
 carrier with frequency offset -> AWGN in a 25 kHz channel -> FM discriminator
 (RAW RX: no de-emphasis, no 300 Hz / 3 kHz filters) -> audio-path low-pass and AC
-coupling -> ADC at 9.6 kHz (optional clock error) -> 12-bit around the 518 bias
-measured on PA4. Output: little-endian uint16 samples.
+coupling -> ADC at 9.6 kHz (optional clock error) -> 12-bit around the 2048
+bias the app sets on PA4. Output: little-endian uint16 samples.
 
 Before, between and after bursts there is no carrier, so the discriminator
 outputs full-scale noise, as a real receiver does.
@@ -15,8 +15,8 @@ import numpy as np
 
 FS_SIM = 192000
 FS_ADC = 9600
-BIAS = 518          # PA4 idle value measured on the K1
-LSB_PER_HZ = 0.15   # ~2.3 kHz pulse peak -> ~350 LSB, like the measured 165-894 range
+BIAS = 2048         # PA4 held at mid-scale by the MCU DAC (unbuffered), as in the app
+LSB_PER_HZ = 0.065  # ~2.3 kHz pulse peak -> ~150 LSB: measured 1896-2194 at 9.6 kHz (406 Lab v1.5)
 
 
 def frame_bits(hexstr, nbits):

@@ -10,7 +10,7 @@ Status:
 |---|---|
 | Feasibility: can an app read the demodulated signal? | **Done**: yes, on PA4 (see `../lab406/README.md`) |
 | Decoder core (`dec406.c`), host-tested on synthetic audio | **Done**: 17/17 tests pass |
-| Radio app (`epirb406_app.c`: trigger, sampling, display) | **Built** (4,024 B of 4 KiB), not yet run on the radio |
+| Radio app (`epirb406_app.c`: trigger, sampling, display) | v1.1 decoded with bit errors on the bench; v1.2 adds the PA4 bias fix |
 | Bench test with the beacon generator on 433.650 MHz | To do |
 
 ## Using the app
@@ -37,10 +37,11 @@ Keys (UV-K5 and UV-K1): UP/DOWN browse history · 1 input mode `INT` (integrate
 the discriminator pulses, default) / `DIR` (use the input as is, in case the
 audio circuit already integrates) · MENU clear · EXIT quit.
 
-Space: the app uses 4,024 of the 4,096 bytes. To make it fit, the sync search
+Space: the app uses 4,076 of the 4,096 bytes (v1.2). To make it fit, the sync search
 compares 32-bit words (the inverted-polarity distance is 44 minus the normal
 one), number formatting uses subtraction instead of division (no `__udivsi3`),
-protocol names are packed in one string, and the history holds 2 entries.
+protocol names are packed in one string, the history holds 2 entries, and the
+app is built with `-fno-jump-tables` (48 bytes saved on the key `switch`).
 
 ## Signal path on the radio
 
@@ -55,7 +56,9 @@ beacon RF --> BK4829 (RAW: no HPF300 / LPF3K / de-emphasis, AFC off)
   app switches the DAC off and reads PA4 as an analog input. Measured on the K1:
   idle 518, message range 165-894 (about 0.6 V p-p), no clipping.
 - The receive audio must be on (AF output enabled, audio path on): the speaker
-  plays the burst. The volume knob is analog; whether it changes the PA4 level
+  plays the burst.
+- **PA4 bias**: the pin has no DC reference; the app holds it at mid-scale with
+  the MCU DAC (output buffer off, code 2048) for the whole run. The volume knob is analog; whether it changes the PA4 level
   still has to be checked.
 - Tuning: first-generation channels span 406.025-406.040 MHz. One VFO at
   406.031 MHz with the wide filter covers them all; a carrier offset only shifts
@@ -154,9 +157,22 @@ boundary (`0` then `1`), which depends on the real signal shape at PA4.
 None of the simulated chains reproduce this exact pattern (pulse or de-emphasized
 signal, low-pass, AC coupling, inverted: INT always decodes). Simulated ADC
 clipping at 0 (PA4 bias is only 518/4095) does break INT decoding entirely, which
-may explain why DIR was in use. Next step: measure the real PA4 level at 9.6 kHz
-with 406 Lab's scope mode (clipping counts, AF DAC gain stepping), then set the
-gain in the app and retest in INT mode.
+may explain why DIR was in use.
+
+**Diagnosis with 406 Lab scope mode (v1.1-v1.5).** Sampled at 9.6 kHz, PA4 slid
+towards 0 V as soon as fast sampling started, and about half of the message
+samples were clipped at 0 whatever the AF gain or RAW setting (details in
+`../lab406/README.md`). PA4 has no DC reference of its own: the audio reaches it
+through a coupling capacitor, and fast ADC sampling drags the node down.
+
+**Fix.** The MCU DAC on PA4, output buffer off, set to mid-scale (2048), holds
+the pin at about VDD/2 as a weak bias. Measured with it (AF gain 14, RAW):
+carrier 2048-2049, message 1896-2194, no clipping. EPIRB 406 v1.2 turns this bias
+on at launch and restores the DAC, its clock and the pin on exit. The host test
+generator now uses the measured bias (2048) and level (~150 LSB peak); 17/17
+still pass.
+
+Next: retest EPIRB 406 v1.2 on the bench, INT mode first.
 
 ## Open points
 
@@ -176,4 +192,4 @@ gain in the app and retest in INT mode.
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.1`), since
-the apps menu does not display versions. Current: **v1.1**.
+the apps menu does not display versions. Current: **v1.2**.

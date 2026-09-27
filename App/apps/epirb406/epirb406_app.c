@@ -21,14 +21,15 @@
  *
  * The receiver is switched to RAW (RX HPF300 / LPF3K / de-emphasis and AFC off)
  * and the RX audio is left on: it reaches PA4 (the voice DAC pin, unused while
- * voice is disabled), which is sampled on ADC channel 4 at 9.6 kHz, timed from
+ * voice is disabled), held at mid-scale by the MCU DAC (unbuffered) and sampled
+ * on ADC channel 4 at 9.6 kHz, timed from
  * SysTick, from the moment RSSI shows a burst. Samples go straight into dec406
  * (see README.md); decoded messages are kept in a short history.
  *
  * Keys (UV-K5 and UV-K1): UP/DOWN browse history · 1 input INT (integrate pulses) / DIR
  *   MENU clear history · EXIT quit. The speaker plays the bursts: lower the volume.
  * The loader re-runs RADIO_SetupRegisters on exit; the app restores the ADC,
- * PA4 and the DAC itself.
+ * PA4, the DAC and its clock itself.
  */
 
 #include <stdint.h>
@@ -52,6 +53,13 @@
 #define ADC_DR      (*(volatile uint32_t *)0x40012450u)
 #define GPIOA_MODER (*(volatile uint32_t *)0x50000000u)
 #define DAC_CR      (*(volatile uint32_t *)0x40007400u)
+#define DAC_SWTRIGR (*(volatile uint32_t *)0x40007404u)
+#define DAC_DHR12R1 (*(volatile uint32_t *)0x40007408u)
+#define RCC_APBENR1 (*(volatile uint32_t *)0x4002103Cu)
+#define RCC_DACEN   (1u << 29)
+/* DAC channel 1 on, output buffer off, software trigger (TSEL1 = 111) */
+#define DAC_CR_BIAS ((1u << 0) | (1u << 1) | (1u << 2) | (7u << 3))
+#define BIAS_CODE   2048u
 #define ADC_SR_EOC     (1u << 1)
 #define ADC_CR2_START  ((1u << 22) | (1u << 20))   /* SWSTART | EXTTRIG */
 #define SMP8_POS       24u
@@ -77,7 +85,7 @@ static dec406_t d;
 static entry_t  hist[HIST];
 static uint8_t  nHist, view, seq, prevKey, lastErr;
 static uint16_t nSync, nFail;
-static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac;
+static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
 static int16_t  rssi, burstRssi;
 static int32_t  floorQ;                 /* noise floor, dBm x64 */
 static bool     running, integrate;
@@ -121,14 +129,25 @@ static uint32_t clkCyc(void){
     return tCyc;
 }
 
+/* ---- PA4 bias: the pin has no DC reference of its own (AC-coupled audio), so
+ * 9.6 kHz sampling dragged it to 0 V and clipped half the message (406 Lab scope).
+ * The MCU DAC on PA4, output buffer off, at mid-scale, holds it at ~VDD/2.
+ * Set for the whole run, restored on exit. ---- */
+static void biasOn(void){
+    GPIOA_MODER=savedModer|(3u<<8);           /* PA4 analog                     */
+    RCC_APBENR1=savedRcc|RCC_DACEN;
+    DAC_CR=DAC_CR_BIAS;
+    DAC_DHR12R1=BIAS_CODE;
+    DAC_SWTRIGR=1u;                           /* DHR -> DOR                     */
+}
+static void biasOff(void){ DAC_CR=savedDac; DAC_DHR12R1=savedDhr; RCC_APBENR1=savedRcc; GPIOA_MODER=savedModer; }
+
 /* ---- ADC on PA4 (channel 4); channel 8 (battery) restored afterwards ---- */
 static void adcSelPA4(void){
-    DAC_CR=savedDac&~1u;                      /* DAC channel 1 off: PA4 is ours */
-    GPIOA_MODER=savedModer|(3u<<8);           /* PA4 analog                     */
     ADC_SMPR3=(savedSmpr3&~(7u<<SMP4_POS))|(((savedSmpr3>>SMP8_POS)&7u)<<SMP4_POS);
     ADC_SQR3=(savedSqr3&~0x1Fu)|ADC_CH_PA4;
 }
-static void adcRestore(void){ ADC_SQR3=savedSqr3; ADC_SMPR3=savedSmpr3; GPIOA_MODER=savedModer; DAC_CR=savedDac; }
+static void adcRestore(void){ ADC_SQR3=savedSqr3; ADC_SMPR3=savedSmpr3; }
 static uint16_t adcRead(void){
     ADC_CR2|=ADC_CR2_START;
     for(uint16_t g=0; !(ADC_SR&ADC_SR_EOC) && g<2000u; g++){}
@@ -228,6 +247,8 @@ void app_main(const app_api_t *api){
     integrate=true; nHist=view=seq=0; nSync=nFail=0; lastErr=0; prevKey=APP_KEY_INVALID;
 
     savedSqr3=ADC_SQR3; savedSmpr3=ADC_SMPR3; savedModer=GPIOA_MODER; savedDac=DAC_CR;
+    savedRcc=RCC_APBENR1; savedDhr=DAC_DHR12R1;
+    biasOn();
     A->backlight_on();
     A->bk_write(REG_2B,(uint16_t)((A->bk_read(REG_2B)|0x0700u)&~0x0007u));
     A->bk_write(REG_73,(uint16_t)(A->bk_read(REG_73)|0x0010u));
@@ -262,6 +283,7 @@ void app_main(const app_api_t *api){
     }
 
     adcRestore();
+    biasOff();
     A->set_af(APP_AF_MUTE);
     A->audio_path(false);
 }
