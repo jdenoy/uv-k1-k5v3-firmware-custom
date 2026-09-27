@@ -171,3 +171,9 @@ gain in the app and retest in INT mode.
   integrator or DC constants retuned (`dec406_init(..., integrate)` also allows a
   phase-like input if the hardware turns out to integrate already).
 - Second-generation beacons (spread-spectrum OQPSK) are out of scope.
+
+## Version
+
+`APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
+compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.1`), since
+the apps menu does not display versions. Current: **v1.1**.

@@ -83,3 +83,9 @@ the scan itself is unchanged.
 Keys (UV-K5 and UV-K1): UP/DOWN group (AF DAC gain in scope mode) · 1 auto-advance
 · 2 speaker · 3 RAW on/off · 4 ADC probe PB1/PA4 · 5 scope mode · MENU clear ·
 EXIT quit.
+
+## Version
+
+`APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
+compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.2`), since
+the apps menu does not display versions. Current: **v1.2**.

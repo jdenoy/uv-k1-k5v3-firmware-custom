@@ -35,6 +35,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../app_api.h"
+
+#ifndef APP_VERSION
+#define APP_VERSION "dev"   /* set by build.sh from APP_VER */
+#endif
+#define TITLE "EPIRB 406 v" APP_VERSION
 #include "dec406.c"
 
 /* ---- MCU registers (PY32F071, core and SysTick at 48 MHz, 10 ms period) ---- */
@@ -159,7 +164,7 @@ static void draw(void){
     char *o;
     A->display_clear();
     A->status_clear();
-    A->print_inverse("EPIRB 406",2,0,true,true,38);
+    A->print_inverse(TITLE,2,0,true,true,(uint8_t)(2u+(sizeof(TITLE)-1u)*4u));
     A->draw_battery();
 
     if(!nHist){

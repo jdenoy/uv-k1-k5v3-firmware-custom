@@ -46,6 +46,11 @@
 #include <stddef.h>
 #include "../app_api.h"
 
+#ifndef APP_VERSION
+#define APP_VERSION "dev"   /* set by build.sh from APP_VER */
+#endif
+#define TITLE "406 LAB v" APP_VERSION
+
 /* ---- MCU registers (PY32F071, SysTick at 48 MHz, 10 ms period) ---- */
 #define SYST_LOAD   (*(volatile uint32_t *)0xE000E014u)
 #define SYST_VAL    (*(volatile uint32_t *)0xE000E018u)
@@ -235,7 +240,7 @@ static void draw(void){
     char *o;
     A->display_clear();
     A->status_clear();
-    A->print_inverse("406 LAB",2,0,true,true,30);
+    A->print_inverse(TITLE,2,0,true,true,(uint8_t)(2u+(sizeof(TITLE)-1u)*4u));
     A->draw_battery();
 
     /* row 0: group, bursts, RSSI vs floor */
