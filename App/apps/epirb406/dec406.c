@@ -113,7 +113,11 @@ bool dec406_push(dec406_t *d, uint16_t sample)
     int32_t xq = (int32_t)sample << 8;
     if (d->meanQ8 < 0) d->meanQ8 = xq;
     int32_t e = xq - d->meanQ8;
-    d->meanQ8 += e >> (d->state == DEC406_SEARCH ? MEAN_SRCH : MEAN_DATA);
+    /* round to nearest: a plain >> floors, so small negative errors always moved
+     * the mean down and small positive ones never moved it up; at the ~150 LSB
+     * swing measured on PA4 that downward creep corrupted the end of the frame */
+    uint8_t msh = d->state == DEC406_SEARCH ? MEAN_SRCH : MEAN_DATA;
+    d->meanQ8 += (e + (1 << (msh - 1))) >> msh;
     int32_t v = e >> 4;
 
     if (d->integrate) d->lvl += v - (d->lvl >> LEAK_SHR);

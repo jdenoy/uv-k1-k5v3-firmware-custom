@@ -54,6 +54,14 @@ run "self-test frame"        "$SELF"  ""                          "self-test fra
 run "short message"          "$SHORT" ""                          "short (112 bits)" "BCH       : ok / ok" "15-hex ID : 1C7C2468ACFFBFF" "(coarse)"
 run "corrupted bit 50"       "$FLIP"  ""                          "BCH       : FAIL / ok"
 run "3 bursts in a row"      "$LONG"  "--bursts 3"                "frames    : 3"
+# Measured PA4 level (~150 LSB peak) at low CNR and with bit-rate error, several
+# noise seeds each: a DC-tracker rounding bias once passed the single-seed cases
+# above but failed BCH-2 on the radio.
+for seed in 1 2 3 4; do
+run "CNR 12 dB, seed $seed"      "$LONG"  "--cnr 12 --seed $seed"               "${REF_LONG[@]}"
+run "clock +2%, seed $seed"      "$LONG"  "--cnr 15 --clock-ppm 20000 --seed $seed"  "${REF_LONG[@]}"
+run "clock -2%, seed $seed"      "$LONG"  "--cnr 15 --clock-ppm -20000 --seed $seed" "${REF_LONG[@]}"
+done
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

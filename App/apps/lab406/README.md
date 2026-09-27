@@ -115,8 +115,10 @@ the bias state to row 5 (`BIAS ON dor 2048  idle N` / `bias off  idle N`): in
 v1.4 it overflowed row 1 (144 px on a 128 px screen) and was unreadable.
 The PB1 option (key 4) was removed to make room: PB1 is tied low.
 
+The backlight stays on while the app runs (v1.6).
+
 ## Version
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.2`), since
-the apps menu does not display versions. Current: **v1.5**.
+the apps menu does not display versions. Current: **v1.6**.

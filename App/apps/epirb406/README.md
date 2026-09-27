@@ -10,7 +10,7 @@ Status:
 |---|---|
 | Feasibility: can an app read the demodulated signal? | **Done**: yes, on PA4 (see `../lab406/README.md`) |
 | Decoder core (`dec406.c`), host-tested on synthetic audio | **Done**: 17/17 tests pass |
-| Radio app (`epirb406_app.c`: trigger, sampling, display) | v1.1 decoded with bit errors on the bench; v1.2 adds the PA4 bias fix |
+| Radio app (`epirb406_app.c`: trigger, sampling, display) | v1.4: PA4 bias fix (v1.2), DC tracker rounding fix (v1.4); bench retest pending |
 | Bench test with the beacon generator on 433.650 MHz | To do |
 
 ## Using the app
@@ -35,10 +35,11 @@ and decoded. The last 2 decoded messages are kept.
 | Bottom row | RSSI / floor, decodes ok, errors, last error: `nosync` (no frame sync found) or `cut` (sync found, message incomplete) |
 
 Keys (UV-K5 and UV-K1): UP/DOWN browse history · MENU clear · EXIT quit. The
+backlight stays on while the app runs (since v1.4), so bursts can be watched. The
 decoder integrates the discriminator pulses (INT); the INT/DIR toggle of v1.1-v1.2
 (key 1) was removed in v1.3 once INT was proven on the radio.
 
-Space: the app uses 4,060 of the 4,096 bytes (v1.3). To make it fit, the sync search
+Space: the app uses 4,068 of the 4,096 bytes (v1.4). To make it fit, the sync search
 compares 32-bit words (the inverted-polarity distance is 44 minus the normal
 one), number formatting uses subtraction instead of division (no `__udivsi3`),
 protocol names are packed in one string, the history holds 2 entries, and the
@@ -124,7 +125,7 @@ test/run_tests.sh
   12-bit around the measured 518 bias, full-scale noise when no carrier.
 - `host_dec406.c` runs the decoder over the samples and prints each message.
 
-Results (2026-09-27): 17/17 pass, covering CNR 12-15 dB, ±5 kHz offset,
+Results (2026-09-27): 29/29 pass. The first 17 cases, covering CNR 12-15 dB, ±5 kHz offset,
 inverted chain, ±3000 ppm clock error, 50-250 µs rise time, 3 kHz audio
 low-pass, 150 Hz AC coupling, a combined worst case, self-test, short message,
 a corrupted bit (BCH-1 reported as failed) and 3 bursts in a row.
@@ -182,6 +183,26 @@ received with errors. v1.3 shows the raw end of the frame (`END` + bits 105-144
 as hex) to tell which: an error-free reception of the reference frame reads
 `END F58521EDA3`.
 
+**v1.3 on the bench.** The generator sends exactly the reference frame
+(`FFFE2F8E3E12345631401FB07DF58521EDA3`), so BCH-2 is computed correctly. The
+received end changed from burst to burst (`F68521E704`, `D5786733DD`): errors
+growing towards the end of the burst, not a fixed pattern.
+
+**Root cause: DC tracker rounding.** The mean was updated with `e >> 10`; an
+arithmetic right shift floors, so every small negative deviation moved the mean
+down by one step and small positive ones never moved it up. The mean crept
+downwards during the message, the leaky integrator accumulated the offset, and
+the last bits went wrong. Negligible with the large swing of the first model,
+fatal at the ~150 LSB swing measured on PA4. Reproduced on the host at the
+measured level (BCH-1 ok / BCH-2 fail, 3 of 4 seeds at 30 dB CNR), fixed with
+round-to-nearest: 4/4 from 30 down to 12 dB, and from -3% to +2% bit-rate error.
+A second-order (bit-rate tracking) loop was tried and dropped: no gain once the
+rounding was fixed.
+
+The test suite now has 12 more cases at the measured level (CNR 12 dB, ±2%
+clock, 4 noise seeds each): the old decoder fails 6 of them with the radio's
+symptom, the fixed one passes all 29.
+
 ## Open points
 
 - **Default position pattern** in the 15-hex ID (`0 1111111 11 0 11111111 11`)
@@ -200,4 +221,4 @@ as hex) to tell which: an error-free reception of the reference frame reads
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.1`), since
-the apps menu does not display versions. Current: **v1.3**.
+the apps menu does not display versions. Current: **v1.4**.

@@ -281,7 +281,7 @@ void app_main(const app_api_t *api){
         A->blit_status();
         A->blit_full();
         A->battery_sample();
-        A->backlight_update();
+        A->backlight_on();             /* keep the screen lit while waiting for bursts */
     }
 
     adcRestore();
