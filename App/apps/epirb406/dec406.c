@@ -40,6 +40,8 @@
  * against T.001. */
 #define STD_DEFAULT_POS  0x0FFBFFu   /* 0 1111111 11 0 11111111 11 */
 
+static const char HX[] = "0123456789ABCDEF";
+
 static uint8_t popc32(uint32_t x)
 {
     x = x - ((x >> 1) & 0x55555555u);
@@ -172,7 +174,6 @@ static bool isStdLoc(uint8_t code)
 
 void dec406_parse(const dec406_t *d, dec406_info_t *o)
 {
-    static const char HX[] = "0123456789ABCDEF";
 
     o->longMsg   = bit(d, 25);
     o->selftest  = d->selftest;

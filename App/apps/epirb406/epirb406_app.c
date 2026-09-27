@@ -26,8 +26,7 @@
  * SysTick, from the moment RSSI shows a burst. Samples go straight into dec406
  * (see README.md); decoded messages are kept in a short history.
  *
- * Keys (UV-K5 and UV-K1): UP/DOWN browse history · 1 input INT (integrate pulses) / DIR
- *   MENU clear history · EXIT quit. The speaker plays the bursts: lower the volume.
+ * Keys (UV-K5 and UV-K1): UP/DOWN browse history · MENU clear history · EXIT quit. The speaker plays the bursts: lower the volume.
  * The loader re-runs RADIO_SetupRegisters on exit; the app restores the ADC,
  * PA4, the DAC and its clock itself.
  */
@@ -88,7 +87,7 @@ static uint16_t nSync, nFail;
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
 static int16_t  rssi, burstRssi;
 static int32_t  floorQ;                 /* noise floor, dBm x64 */
-static bool     running, integrate;
+static bool     running;
 static uint32_t tPrev, tCyc;
 static char     str[34];
 
@@ -157,7 +156,7 @@ static uint16_t adcRead(void){
 /* ---- one burst: sample PA4 at 9.6 kHz into the decoder ---- */
 static void capture(void){
     burstRssi=rssi;
-    dec406_init(&d,integrate);
+    dec406_init(&d,true);        /* INT: integrate the discriminator pulses */
     adcSelPA4();
     clkStart();
     uint32_t next=0;
@@ -187,7 +186,7 @@ static void draw(void){
     A->draw_battery();
 
     if(!nHist){
-        o=put(str,"Waiting for burst"); line(1,o);
+        o=put(str,"Waiting..."); line(1,o);
     } else {
         const entry_t *e=&hist[view];
         const dec406_info_t *in=&e->in;
@@ -197,9 +196,14 @@ static void draw(void){
         else o=put(str,"no position");
         line(2,o);
 
+        /* raw end of the last received frame (bits 105-144), for bench diagnosis */
+        o=put(str,"END ");
+        for(uint8_t i=10;i<15;i++){ *o++=HX[d.bits[i]>>4]; *o++=HX[d.bits[i]&15u]; }
+        tiny(0,26,o);
+
         o=put(str,in->selftest?"SELF-TEST ":"");
         o=put(o,in->longMsg?"LONG":"SHORT");
-        o=put(o," BCH "); o=put(o,in->bch1?"ok":"ERR"); *o++='/'; o=put(o,in->bch2?"ok":"ERR");
+        o=put(o," BCH "); o=put(o,in->bch1?"OK":"ERR"); *o++='/'; o=put(o,in->bch2?"OK":"ERR");
         tiny(0,33,o);
         o=put(str,"#"); o=puti(o,e->seq); o=put(o," "); o=puti(o,e->rssi); o=put(o,"dBm");
         if(in->longMsg){ o=put(o,in->internalPos?" int":" ext"); if(in->homing) o=put(o," 121.5"); }
@@ -213,7 +217,6 @@ static void draw(void){
     if(lastErr) o=put(o,lastErr==1u?" nosync":" cut");
     tiny(0,48,o);
     if(nHist){ o=puti(str,view+1u); *o++='/'; o=puti(o,nHist); tiny((uint8_t)(127u-slen(str)*4u),33,o); }
-    tiny(115,40,put(str,integrate?"INT":"DIR"));
 }
 
 /* ---- input ---- */
@@ -224,7 +227,6 @@ static void handleKeys(void){
     A->backlight_on();
     switch(key){
         case APP_KEY_EXIT: running=false; break;
-        case APP_KEY_1:    integrate=!integrate; break;
         case APP_KEY_MENU: nHist=0; view=0; nSync=nFail=0; lastErr=0; break;
         case APP_KEY_UP:
         case APP_KEY_DOWN:
@@ -244,7 +246,7 @@ static void cooldown(void){
 __attribute__((section(".text.entry"),used))
 void app_main(const app_api_t *api){
     A=api;
-    integrate=true; nHist=view=seq=0; nSync=nFail=0; lastErr=0; prevKey=APP_KEY_INVALID;
+    nHist=view=seq=0; nSync=nFail=0; lastErr=0; prevKey=APP_KEY_INVALID;
 
     savedSqr3=ADC_SQR3; savedSmpr3=ADC_SMPR3; savedModer=GPIOA_MODER; savedDac=DAC_CR;
     savedRcc=RCC_APBENR1; savedDhr=DAC_DHR12R1;

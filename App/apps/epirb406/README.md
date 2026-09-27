@@ -30,14 +30,15 @@ and decoded. The last 2 decoded messages are kept.
 | Line 0 | 15-hex ID |
 | Line 1 | Country code and protocol |
 | Line 2 | Position (5 decimals, truncated) or "no position" |
-| Small rows | SELF-TEST, LONG/SHORT, BCH-1/BCH-2; `#` decode number, RSSI of the burst, internal/external position source, 121.5 homing, `coarse` (no PDF-2 offsets), `rawID` (not a standard location protocol, ID = raw bits 26-85); `1/2` history position; `INT`/`DIR` input mode |
+| Line 3 | `END` + raw bits 105-144 of the last frame received, in hex (bench diagnosis) |
+| Small rows | SELF-TEST, LONG/SHORT, BCH-1/BCH-2; `#` decode number, RSSI of the burst, internal/external position source, 121.5 homing, `coarse` (no PDF-2 offsets), `rawID` (not a standard location protocol, ID = raw bits 26-85); `1/2` history position |
 | Bottom row | RSSI / floor, decodes ok, errors, last error: `nosync` (no frame sync found) or `cut` (sync found, message incomplete) |
 
-Keys (UV-K5 and UV-K1): UP/DOWN browse history · 1 input mode `INT` (integrate
-the discriminator pulses, default) / `DIR` (use the input as is, in case the
-audio circuit already integrates) · MENU clear · EXIT quit.
+Keys (UV-K5 and UV-K1): UP/DOWN browse history · MENU clear · EXIT quit. The
+decoder integrates the discriminator pulses (INT); the INT/DIR toggle of v1.1-v1.2
+(key 1) was removed in v1.3 once INT was proven on the radio.
 
-Space: the app uses 4,076 of the 4,096 bytes (v1.2). To make it fit, the sync search
+Space: the app uses 4,060 of the 4,096 bytes (v1.3). To make it fit, the sync search
 compares 32-bit words (the inverted-polarity distance is 44 minus the normal
 one), number formatting uses subtraction instead of division (no `__udivsi3`),
 protocol names are packed in one string, the history holds 2 entries, and the
@@ -172,7 +173,14 @@ on at launch and restores the DAC, its clock and the pin on exit. The host test
 generator now uses the measured bias (2048) and level (~150 LSB peak); 17/17
 still pass.
 
-Next: retest EPIRB 406 v1.2 on the bench, INT mode first.
+**v1.2 on the bench (INT mode):** ID `1C7C2468ACFFBFF`, country 227, "Std test",
+BCH-1 OK: the first block (bits 25-106) is received intact and BCH-1 is confirmed
+on a real frame. BCH-2 fails, so the fine position offsets and the homing flag
+are not applied (`49.25000N 0.75000E coarse`, no `121.5`). Either BCH-2 is
+computed differently from the generator, or the last bits of the burst are
+received with errors. v1.3 shows the raw end of the frame (`END` + bits 105-144
+as hex) to tell which: an error-free reception of the reference frame reads
+`END F58521EDA3`.
 
 ## Open points
 
@@ -192,4 +200,4 @@ Next: retest EPIRB 406 v1.2 on the bench, INT mode first.
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.1`), since
-the apps menu does not display versions. Current: **v1.2**.
+the apps menu does not display versions. Current: **v1.3**.
