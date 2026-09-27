@@ -275,14 +275,14 @@ static void draw(void){
 
     /* rows 1-4: scope summary, or two registers per row (activity A/B) */
     if(scope){
-        o=put(str,"SCOPE 9.6k  AF gain "); o=puti(o,dacGain); if(bias){ o=put(o," BIAS dor "); o=puti(o,(int32_t)(DAC_DOR1&0xFFFu)); } else o=put(o," bias off"); row(0,1,o);
+        o=put(str,"SCOPE  gain "); o=puti(o,dacGain); row(0,1,o);
         for(uint8_t w=0;w<2 && captured;w++){
             const st_t *st=&S[CH_ADC][w];
             o=put(str,w?"msg ":"car "); o=puti(o,st->mn); *o++='-'; o=puti(o,st->mx);
             o=put(o," act "); o=puti(o,act(st)/10u); o=put(o," n"); o=puti(o,st->n);
             row(0,(uint8_t)(2u+w),o);
         }
-        if(captured){ o=put(str,"clip at 0: "); o=puti(o,clipLo); o=put(o,"  at 4095: "); o=puti(o,clipHi); row(0,4,o); }
+        if(captured){ o=put(str,"clip 0: "); o=puti(o,clipLo); o=put(o,"  4095: "); o=puti(o,clipHi); row(0,4,o); }
     } else
     for(uint8_t c=0;c<8;c++){
         o=puthex2(str,capReg(c));
@@ -291,11 +291,17 @@ static void draw(void){
         row((uint8_t)((c&1u)*64u),(uint8_t)(1u+c/2u),o);
     }
 
-    /* row 5: PB1 idle value, and its activity/range in the message window */
-    o=put(str,adcCh==9?"PB1 ":"PA4 "); o=puti(o,adcIdle);
+    /* row 5: scope mode: bias state and PA4 idle value (each fits in 128 px);
+     * register mode: PA4 idle value, activity and range in the message window */
+    if(scope){
+        if(bias){ o=put(str,"BIAS ON dor "); o=puti(o,(int32_t)(DAC_DOR1&0xFFFu)); } else o=put(str,"bias off");
+        o=put(o,"  idle "); o=puti(o,adcIdle);
+    } else {
+    o=put(str,"PA4 "); o=puti(o,adcIdle);
     if(captured){ o=put(o," "); o=puti(o,act(&S[CH_ADC][0])/10u); *o++='/'; o=puti(o,act(&S[CH_ADC][1])/10u);
                   o=put(o," "); o=puti(o,S[CH_ADC][1].mn); *o++='-'; o=puti(o,S[CH_ADC][1].mx);
                   o=put(o," n"); o=puti(o,S[0][1].n); }
+    }
     row(0,5,o);
 
     /* row 7: switches */

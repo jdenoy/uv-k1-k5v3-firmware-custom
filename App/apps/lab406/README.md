@@ -110,11 +110,13 @@ bias off, carrier 210-767, message 0-323, 989 at 0. The DAC pulled PA4 to 0 V
 instead of mid-scale: the value written before enabling the channel was most
 likely not transferred to the output. It also shows how weak the PA4 node is.
 v1.4 enables the channel in software-trigger mode, writes 2048, triggers the
-transfer, and shows the DAC output register (`dor`) in row 1 to confirm it.
+transfer, and shows the DAC output register (`dor`) to confirm it. v1.5 moves
+the bias state to row 5 (`BIAS ON dor 2048  idle N` / `bias off  idle N`): in
+v1.4 it overflowed row 1 (144 px on a 128 px screen) and was unreadable.
 The PB1 option (key 4) was removed to make room: PB1 is tied low.
 
 ## Version
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.2`), since
-the apps menu does not display versions. Current: **v1.4**.
+the apps menu does not display versions. Current: **v1.5**.
