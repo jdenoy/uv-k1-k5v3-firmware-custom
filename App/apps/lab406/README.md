@@ -27,7 +27,7 @@ firmware gives no obvious route:
    - A = 15-130 ms after trigger (unmodulated carrier)
    - B = 200-420 ms (biphase message)
 4. Activity = mean |v[n] - v[n-1]| per sample. A channel that tracks the
-   demodulated signal is quiet in A and busy in B. Score = B / (A + 1).
+   demodulated signal is quiet in A and busy in B.
 5. 16 groups cover registers 0x00-0x7F (0x5F, the FSK FIFO, is never read).
 
 ADC pins probed (key 4): **PB1** (channel 9, set analog by `BOARD_ADC_Init` but
@@ -67,8 +67,19 @@ the knob down during a burst and watching the PA4 range.
 | 0 | `G3>4` results of group 3, next is 4 · `B` bursts · RSSI / floor |
 | 1-4 | `RR a/b` per register: activity on carrier / message (whole LSB) |
 | 5 | `PB1` or `PA4`: idle value, a/b, min-max in B, `n` samples per window |
-| 6 | `TOP`: best 4 registers so far with their B/A ratio |
 | 7 | RAW, speaker, auto/manual group advance |
 
-Keys (UV-K5 and UV-K1): UP/DOWN group · 1 auto-advance · 2 speaker · 3 RAW on/off
-· 4 ADC probe PB1/PA4 · MENU clear · EXIT quit.
+## Scope mode (key 5)
+
+Added after the first on-air decode of the EPIRB 406 app gave a systematic error
+pattern (see `../epirb406/README.md`). PA4 is sampled alone, paced exactly like
+the decoder (9.6 kHz, one sample every 5000 cycles), for the same windows.
+Rows 1-4 then show the AF DAC gain (REG_48 bits 3:0), min-max, activity and
+sample count for the carrier and message windows, and how many message samples
+clip at 0 or 4095. UP/DOWN step the AF DAC gain (0-15) to find a level that
+does not clip. The TOP ranking of the register scan was removed to make room;
+the scan itself is unchanged.
+
+Keys (UV-K5 and UV-K1): UP/DOWN group (AF DAC gain in scope mode) · 1 auto-advance
+· 2 speaker · 3 RAW on/off · 4 ADC probe PB1/PA4 · 5 scope mode · MENU clear ·
+EXIT quit.

@@ -54,6 +54,9 @@ def main():
     ap.add_argument("--rise-us", type=float, default=150)
     ap.add_argument("--audio-lpf", type=float, default=5000)
     ap.add_argument("--hpf", type=float, default=30, help="AC coupling corner, Hz")
+    ap.add_argument("--deemph-us", type=float, default=0,
+                    help="1-pole de-emphasis time constant in the audio circuit, us (0 = none)")
+    ap.add_argument("--gain", type=float, default=LSB_PER_HZ, help="ADC LSB per Hz of deviation")
     ap.add_argument("--clock-ppm", type=float, default=0)
     ap.add_argument("--invert", action="store_true")
     ap.add_argument("--seed", type=int, default=1)
@@ -81,6 +84,14 @@ def main():
 
     f = np.angle(z[1:] * np.conj(z[:-1])) * FS_SIM / (2 * np.pi)   # Hz
     f = lowpass(f, a.audio_lpf, FS_SIM)
+    if a.deemph_us > 0:                                           # 1-pole RC low-pass
+        k = 1 - np.exp(-1 / (FS_SIM * a.deemph_us * 1e-6))
+        y = np.empty_like(f)
+        acc = 0.0
+        for i, v in enumerate(f):
+            acc += k * (v - acc)
+            y[i] = acc
+        f = y * (a.deemph_us * 1e-6) * 2 * np.pi * 2300 / 1.1     # keep a comparable swing
     if a.hpf > 0:                                                 # 1-pole AC coupling
         alpha = np.exp(-2 * np.pi * a.hpf / FS_SIM)
         y = np.empty_like(f)
@@ -96,7 +107,7 @@ def main():
     step = FS_SIM / FS_ADC * (1 + a.clock_ppm * 1e-6)
     idx = np.arange(0, len(f) - 1, step)
     s = np.interp(idx, np.arange(len(f)), f)
-    adc = np.clip(np.round(BIAS + LSB_PER_HZ * s), 0, 4095).astype("<u2")
+    adc = np.clip(np.round(BIAS + a.gain * s), 0, 4095).astype("<u2")
     adc.tofile(a.out)
 
 

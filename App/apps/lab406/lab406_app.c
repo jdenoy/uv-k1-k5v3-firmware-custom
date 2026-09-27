@@ -31,12 +31,12 @@
  *     A = 15..130 ms after trigger  (unmodulated carrier)
  *     B = 200..420 ms               (biphase PSK message)
  * Activity = mean |v[n]-v[n-1]| per sample. A register that tracks the
- * demodulated signal is quiet in A and busy in B: score = B/(A+1). After each
- * burst the next group is probed (16 groups cover 0x00-0x7F; 0x5F, the FSK FIFO,
- * is never read). The best scores are kept across groups.
+ * demodulated signal is quiet in A and busy in B. After each burst the next group
+ * is probed (16 groups cover 0x00-0x7F; 0x5F, the FSK FIFO, is never read).
  *
  * Keys (UV-K5 and UV-K1): UP/DOWN group · 1 auto-advance · 2 speaker (RAW audio)
- *   3 RAW on/off · 4 ADC probe PB1/PA4 · MENU clear results · EXIT quit.
+ *   3 RAW on/off · 4 ADC probe PB1/PA4 · 5 scope mode (PA4 at 9.6 kHz, clipping
+ *   counts; UP/DOWN then step the AF DAC gain, REG_48 bits 3:0) · MENU clear · EXIT.
  * The loader re-runs RADIO_SetupRegisters on exit, so every radio register the
  * probe touches is restored by the firmware; the app restores the ADC itself.
  */
@@ -65,6 +65,8 @@
 #define REG_2B      0x2B   /* bits 10/9/8: disable RX HPF300 / LPF3K / de-emphasis */
 #define REG_73      0x73   /* bit 4: AFC disable                                    */
 #define REG_FIFO    0x5F   /* FSK FIFO: reading pops data, never probed            */
+#define REG_48      0x48   /* bits 3:0: AF DAC gain, last RX audio gain stage      */
+#define CYC_PER_SAMPLE 5000u  /* scope mode: 48 MHz / 9.6 kHz, the decoder's rate */
 
 /* ---- probe ---- */
 #define GROUPS      16
@@ -85,16 +87,17 @@ typedef struct { uint32_t tv; uint16_t n, mn, mx; } st_t;
 static const app_api_t *A;
 static st_t     S[CH][2];
 static uint16_t prv[CH];
-static uint8_t  score[128];           /* best B/(A+1), Q2, per register */
 static uint16_t adcIdle;
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac;
 static uint8_t  adcCh;                /* 9 = PB1, 4 = PA4 (voice DAC pin) */
-static uint16_t saved2B, saved73;
+static uint16_t saved2B, saved73, saved48, clipLo, clipHi;
+static uint8_t  dacGain;
+static bool     scope;                /* PA4 alone at 9.6 kHz, AF DAC gain on UP/DOWN */
 static int16_t  rssi;
 static int32_t  floorQ;               /* noise floor, dBm x64 */
 static uint8_t  group, capGroup, bursts, prevKey;   /* group = next to probe, capGroup = shown */
 static bool     autoAdv, speaker, rawOn, running, captured;
-static uint32_t tPrev, tCyc, tUs;
+static uint32_t tPrev, tCyc, tUs, tCycAll;
 static char     str[34];
 
 /* ---- formatting ---- */
@@ -114,14 +117,18 @@ static char *puthex2(char *o,uint8_t v){
 static void row(uint8_t x,uint8_t r,char *end){ *end='\0'; A->print_tiny(str,x,(uint8_t)(r*7u+1u),false,true); }
 
 /* ---- microsecond clock from SysTick (call at least every 10 ms) ---- */
-static void clkStart(void){ tPrev=SYST_VAL; tCyc=0; tUs=0; }
+static void clkStart(void){ tPrev=SYST_VAL; tCyc=0; tUs=0; tCycAll=0; }
+static uint32_t clkCyc(void);
 static uint32_t clkUs(void){
     uint32_t v=SYST_VAL;
-    tCyc += (v<=tPrev) ? tPrev-v : tPrev+(SYST_LOAD+1u-v);
+    uint32_t dc = (v<=tPrev) ? tPrev-v : tPrev+(SYST_LOAD+1u-v);
+    tCyc += dc; tCycAll += dc;
     tPrev=v;
     tUs+=tCyc/CPU_MHZ; tCyc%=CPU_MHZ;
     return tUs;
 }
+
+static uint32_t clkCyc(void){ clkUs(); return tCycAll; }
 
 /* ---- ADC: probe channel only while probing, channel 8 (battery) otherwise.
  * PA4 is the voice DAC output (feeds the audio amplifier); voice is disabled in
@@ -154,6 +161,7 @@ static void setSpeaker(void){
     else       { A->set_af(APP_AF_MUTE); A->audio_path(false); }
 }
 static uint8_t regOf(uint8_t ch){ return (uint8_t)(group*8u+ch); }
+static void setDac(void){ A->bk_write(REG_48,(uint16_t)((saved48&~0x000Fu)|dacGain)); }
 static uint8_t capReg(uint8_t ch){ return (uint8_t)(capGroup*8u+ch); }
 
 /* ---- capture one burst ---- */
@@ -171,6 +179,33 @@ static void capture(void){
         for(uint8_t w=0;w<2;w++){ S[c][w].tv=0; S[c][w].n=0; S[c][w].mn=0xFFFF; S[c][w].mx=0; }
     }
     adcSel9();
+    if(scope){
+        /* PA4 alone, paced like the decoder: one sample every 5000 cycles */
+        clipLo=clipHi=0;
+        prv[CH_ADC]=adcRead();
+        clkStart();
+        uint32_t next=0;
+        for(;;){
+            while(clkCyc()<next){}
+            uint32_t t=tCycAll/CPU_MHZ;
+            if(t>=CAP_END) break;
+            uint16_t v=adcRead();
+            int8_t w = (t>=WIN_A0&&t<WIN_A1) ? 0 : (t>=WIN_B0&&t<WIN_B1) ? 1 : -1;
+            if(w>=0){
+                st_t *st=&S[CH_ADC][w];
+                st->tv+= v>prv[CH_ADC] ? (uint32_t)(v-prv[CH_ADC]) : (uint32_t)(prv[CH_ADC]-v);
+                st->n++;
+                if(v<st->mn) st->mn=v;
+                if(v>st->mx) st->mx=v;
+                if(w){ if(v==0u) clipLo++; if(v>=4095u) clipHi++; }
+            }
+            prv[CH_ADC]=v;
+            next+=CYC_PER_SAMPLE;
+        }
+        adcRestore();
+        captured=true; bursts++;
+        return;
+    }
     for(uint8_t c=0;c<CH;c++) prv[c]=sample(c);
     clkStart();
     for(;;){
@@ -191,12 +226,6 @@ static void capture(void){
     }
     adcRestore();
 
-    for(uint8_t c=0;c<8;c++){
-        uint32_t sc=((uint32_t)act(&S[c][1])*4u)/((uint32_t)act(&S[c][0])+10u);
-        if(sc>255u) sc=255u;
-        uint8_t r=regOf(c);
-        if(r!=REG_FIFO && sc>score[r]) score[r]=(uint8_t)sc;
-    }
     captured=true;
     bursts++;
 }
@@ -214,7 +243,17 @@ static void draw(void){
     o=put(o," B"); o=puti(o,bursts); o=put(o," "); o=puti(o,rssi); o=put(o,"/"); o=puti(o,floorQ/64);
     row(0,0,o);
 
-    /* rows 1-4: two registers per row, activity A/B in whole LSB */
+    /* rows 1-4: scope summary, or two registers per row (activity A/B) */
+    if(scope){
+        o=put(str,"SCOPE PA4 9.6kHz  DAC gain "); o=puti(o,dacGain); row(0,1,o);
+        for(uint8_t w=0;w<2 && captured;w++){
+            const st_t *st=&S[CH_ADC][w];
+            o=put(str,w?"msg ":"car "); o=puti(o,st->mn); *o++='-'; o=puti(o,st->mx);
+            o=put(o," act "); o=puti(o,act(st)/10u); o=put(o," n"); o=puti(o,st->n);
+            row(0,(uint8_t)(2u+w),o);
+        }
+        if(captured){ o=put(str,"clip at 0: "); o=puti(o,clipLo); o=put(o,"  at 4095: "); o=puti(o,clipHi); row(0,4,o); }
+    } else
     for(uint8_t c=0;c<8;c++){
         o=puthex2(str,capReg(c));
         if(capReg(c)==REG_FIFO) o=put(o," --");
@@ -229,21 +268,6 @@ static void draw(void){
                   o=put(o," n"); o=puti(o,S[0][1].n); }
     row(0,5,o);
 
-    /* row 6: best four registers so far */
-    o=put(str,"TOP");
-    { uint8_t used[4]={0xFF,0xFF,0xFF,0xFF};
-      for(uint8_t k=0;k<4;k++){
-          uint8_t best=0xFF, bv=0;
-          for(uint8_t r=0;r<128;r++){
-              if(r==used[0]||r==used[1]||r==used[2]) continue;
-              if(score[r]>bv){ bv=score[r]; best=r; }
-          }
-          if(best==0xFF) break;
-          used[k]=best;
-          *o++=' '; o=puthex2(o,best); *o++='x'; o=puti(o,bv/4u);
-      } }
-    row(0,6,o);
-
     /* row 7: switches */
     o=put(str,rawOn?"RAW":"raw"); o=put(o,speaker?" SPK":" spk"); o=put(o,autoAdv?" AUTO":" man");
     o=put(o,captured?"  WAIT":"  WAIT 1st");
@@ -252,7 +276,6 @@ static void draw(void){
 
 /* ---- input ---- */
 static void clearAll(void){
-    for(uint8_t r=0;r<128;r++) score[r]=0;
     group=0; capGroup=0; bursts=0; captured=false;
 }
 static void handleKeys(void){
@@ -266,10 +289,12 @@ static void handleKeys(void){
         case APP_KEY_2:    speaker=!speaker; setSpeaker(); break;
         case APP_KEY_3:    rawOn=!rawOn; setRaw(); break;
         case APP_KEY_4:    adcCh=(adcCh==9)?4:9; captured=false; break;
+        case APP_KEY_5:    scope=!scope; if(scope) adcCh=4; captured=false; break;
         case APP_KEY_MENU: clearAll(); break;
         case APP_KEY_UP:
         case APP_KEY_DOWN: {
             int8_t d=A->nav_dir(key);
+            if(scope){ dacGain=(uint8_t)((dacGain+(d>0?1u:15u))&15u); setDac(); captured=false; break; }
             group=(uint8_t)((group+(d>0?1u:GROUPS-1u))%GROUPS);
             if(!captured) capGroup=group;
             break; }
@@ -293,7 +318,8 @@ void app_main(const app_api_t *api){
 
     savedSqr3=ADC_SQR3; savedSmpr3=ADC_SMPR3; savedModer=GPIOA_MODER; savedDac=DAC_CR;
     adcCh=9;
-    saved2B=A->bk_read(REG_2B); saved73=A->bk_read(REG_73);
+    saved2B=A->bk_read(REG_2B); saved73=A->bk_read(REG_73); saved48=A->bk_read(REG_48);
+    dacGain=(uint8_t)(saved48&15u); scope=false;
     A->backlight_on();
     setRaw();
     setSpeaker();

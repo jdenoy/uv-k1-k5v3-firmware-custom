@@ -134,6 +134,30 @@ Sensitivity (5 seeds per point, CNR in 25 kHz):
 Possible gains later: BCH error correction (BCH-1 corrects up to 3 bit errors,
 BCH-2 up to 2), and a 12.5 kHz filter when the beacon channel is known (+3 dB).
 
+## Bench results
+
+**2026-09-27, UV-K1, generator on 433.650 MHz, DIR mode, first on-air decode.**
+Sync found, but the message is wrong in a systematic way:
+
+| | Sent | Received |
+|---|---|---|
+| 15-hex ID | `1C7C2468ACFFBFF` | `0C3C002004FFBFF` |
+| Country | 227 | 97 |
+| Position | 49.27111 N 0.78222 E | 16.00000 N 0.25000 E (coarse) |
+| BCH | ok / ok | ERR / ERR |
+
+Over bits 26-64: every `1` preceded by a `0` is read as `0` (9/9), every `1`
+preceded by a `1` is correct (8/8), no `0` is ever wrong. Timing and sync are
+therefore right; the decision fails where biphase-L has no transition at the bit
+boundary (`0` then `1`), which depends on the real signal shape at PA4.
+
+None of the simulated chains reproduce this exact pattern (pulse or de-emphasized
+signal, low-pass, AC coupling, inverted: INT always decodes). Simulated ADC
+clipping at 0 (PA4 bias is only 518/4095) does break INT decoding entirely, which
+may explain why DIR was in use. Next step: measure the real PA4 level at 9.6 kHz
+with 406 Lab's scope mode (clipping counts, AF DAC gain stepping), then set the
+gain in the app and retest in INT mode.
+
 ## Open points
 
 - **Default position pattern** in the 15-hex ID (`0 1111111 11 0 11111111 11`)
