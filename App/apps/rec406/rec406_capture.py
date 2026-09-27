@@ -86,17 +86,24 @@ def decoder():
     return exe
 
 
-def save(out, header_line, digits):
+def save(out, header_line, digits, rssi_line=None):
     stamp = time.strftime("%Y%m%d_%H%M%S")
     base = os.path.join(out, "rec406_" + stamp)
     with open(base + ".txt", "w") as f:
         f.write(header_line + "\n")
+        if rssi_line:
+            f.write(rssi_line + "\n")
         for i in range(0, len(digits), 100):
             f.write(digits[i:i + 100] + "\n")
         f.write("END\n")
     h = parse_header(header_line)
     to_u16(h, digits, base + ".u16")
     print(f"saved {base}.txt / .u16  ({len(digits)} samples, c {h['c']}, rssi {h['rssi']}, clip {h['clip']})")
+    if rssi_line:
+        v = rssi_line.split()[1:]
+        print("RSSI every 10 ms from 80 ms after the trigger:")
+        for i in range(0, len(v), 10):
+            print(f"  {80 + 10 * i:3d} ms: " + " ".join(f"{int(x):4d}" for x in v[i:i + 10]))
     exe = decoder()
     if exe:
         subprocess.call([exe, base + ".u16"])
@@ -106,7 +113,7 @@ def convert(txt):
     with open(txt) as f:
         rows = [r.strip() for r in f if r.strip()]
     h = parse_header(rows[0])
-    digits = "".join(r[:-3] if r.endswith("END") else r for r in rows[1:])
+    digits = "".join(r[:-3] if r.endswith("END") else r for r in rows[1:] if not r.startswith("RSSI"))
     out = os.path.splitext(txt)[0] + ".u16"
     to_u16(h, digits, out)
     print(f"{out}: {len(digits)} samples")
@@ -131,7 +138,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     fd = open_port(a.port)
     print(f"listening on {a.port} (38400 8N1), Ctrl-C to stop")
-    n, header, digits = 0, None, ""
+    n, header, digits, rssi_line = 0, None, "", None
     try:
         nb = 0
         for ln in lines(fd):
@@ -139,12 +146,14 @@ def main():
             if a.debug:
                 print(f"[{nb:6d}] {ln[:60]!r}", flush=True)
             if ln.startswith("REC406"):
-                header, digits = ln, ""
+                header, digits, rssi_line = ln, "", None
+            elif header and ln.startswith("RSSI"):          # 406 Rec v1.1+
+                rssi_line = ln
             elif header and ln.endswith("END"):
                 # 406 Rec v1.0 sends no line break after the last, partial line
                 # (4260 = 42 x 100 + 60), so END arrives glued to it
                 digits += ln[:-3]
-                save(a.out, header, digits)
+                save(a.out, header, digits, rssi_line)
                 header, n = None, n + 1
                 if a.count and n >= a.count:
                     break

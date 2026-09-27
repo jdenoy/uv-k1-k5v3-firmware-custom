@@ -20,14 +20,15 @@
  * RSSI trigger) and sends it over the programming cable (USART1, 38400 8N1, as
  * set up by the firmware) for analysis with the host decoder.
  *
- * Storage: 4260 samples (444 ms, from 80 ms after the trigger: end of the carrier,
- * preamble, sync and the whole 144-bit frame), 4 bits each, non-linear code
+ * Storage: 3920 samples (408 ms, from 80 ms after the trigger: end of the carrier,
+ * preamble, sync and all but the last bits of a long frame), 4 bits each, non-linear code
  * "comp1" around c = mean of the first 32 samples (carrier; the first sample
  * stands in for c until then). Code n counts the thresholds TH[] at or below
  * x - c; n = 0 or 15 counts as clipped.
  * Output, text:
- *   REC406 <ver> fs 9600 n 4260 t0 80 code comp1 c <c> rssi <dBm> clip <count>
- *   <43 lines of up to 100 hex digits, one code per sample>
+ *   REC406 <ver> fs 9600 n 3920 t0 80 code comp1 c <c> rssi <dBm> clip <count>
+ *   RSSI <41 values, dBm, one per 10 ms from the start of the recording>
+ *   <40 lines of up to 100 hex digits, one code per sample>
  *   END
  * Keys (UV-K5 and UV-K1): 1 resend the last recording · EXIT quit.
  */
@@ -68,13 +69,15 @@
 
 #define REG_2B      0x2B
 #define REG_73      0x73
-#define NSAMP       4260u                  /* 444 ms at 9.6 kHz: what fits in 4 KiB */
+#define NSAMP       3920u                  /* 408 ms at 9.6 kHz: what fits in 4 KiB */
+#define NRSSI       41u                    /* one RSSI reading per 96 samples (10 ms) */
 #define DELAY_CYC   (48000u * 80u)         /* start 80 ms after the trigger          */
 #define TRIG_DB     10
 #define TICK_MS     50
 
 static const app_api_t *A;
 static uint8_t  buf[NSAMP / 2u];
+static int8_t   rs[NRSSI];            /* RSSI trace during the recording, dBm */
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
 static uint32_t tPrev, tCyc;
 static int32_t  floorQ, center;
@@ -109,15 +112,18 @@ static void tx(char c){
 static void txs(const char *s){ while(*s) tx(*s++); }
 
 static void send(void){
-    txs("REC406 " APP_VERSION " fs 9600 n 4260 t0 80 code comp1 c ");  /* longer than str[] */
+    txs("REC406 " APP_VERSION " fs 9600 n 3920 t0 80 code comp1 c ");  /* longer than str[] */
     char *o=puti(str,center); o=put(o," rssi "); o=puti(o,burstRssi); o=put(o," clip "); o=puti(o,clip);
     o=put(o,"\r\n"); *o='\0'; txs(str);
+    txs("RSSI");
+    for(uint8_t k=0;k<NRSSI;k++){ o=put(str," "); o=puti(o,rs[k]); *o='\0'; txs(str); }
+    txs("\r\n");
     uint8_t col=0;
     for(uint16_t i=0;i<NSAMP;i++){
         tx(HX[(buf[i>>1]>>((i&1u)?0:4))&15u]);
         if(++col==100u){ col=0; txs("\r\n"); }
     }
-    txs("END\r\n");
+    txs("\r\nEND\r\n");
 }
 
 /* ---- timing, ADC, bias (as in EPIRB 406) ---- */
@@ -140,10 +146,14 @@ static void record(void){
     tPrev=SYST_VAL; tCyc=0;
     uint32_t next=DELAY_CYC;                /* skip the start of the carrier */
     int32_t sum=0;
+    uint8_t rsi=0, rsc=0;
     clip=0;
     for(uint16_t i=0;i<NSAMP;i++){
         while(clkCyc()<next){}
         int32_t x=adcRead();
+        /* RSSI every 96 samples: ~70 us, fits in the 104 us sample period */
+        if(rsc==0u && rsi<NRSSI){ int16_t v=A->rssi_dbm(); rs[rsi++]=(int8_t)(v<-128?-128:v); }
+        if(++rsc==96u) rsc=0;
         if(i==0u) center=x;                          /* provisional until 32 samples */
         if(i<32u){ sum+=x; if(i==31u) center=(sum+16)>>5; }
         /* non-linear 4-bit code: count of thresholds at or below x - c */
@@ -168,7 +178,7 @@ static void draw(const char *state){
     o=puti(str,rssi); *o++='/'; o=puti(o,floorQ/64); o=put(o," dBm"); line(2,o);
     if(have){
         o=put(str,"rec "); o=puti(o,nRec); o=put(o," c "); o=puti(o,center); line(3,o);
-        o=put(str,"clip "); o=puti(o,clip); o=put(o," / 4260"); line(4,o);
+        o=put(str,"clip "); o=puti(o,clip); o=put(o," / 3920"); line(4,o);
     }
     line(6,put(str,"1:resend EXIT:quit"));    /* 18 chars x 7 px = 126 px */
     A->blit_status(); A->blit_full();
