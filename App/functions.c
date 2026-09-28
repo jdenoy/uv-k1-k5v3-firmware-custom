@@ -17,6 +17,9 @@
 #include <string.h>
 
 #include "app/dtmf.h"
+#ifdef ENABLE_FEAT_ZVEI
+    #include "app/zvei.h"
+#endif
 #if defined(ENABLE_FMRADIO_EMBEDDED)
     #include "app/fm.h"
 #endif
@@ -169,6 +172,13 @@ void FUNCTION_Transmit()
 
     // turn the RED LED on
     BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
+
+#ifdef ENABLE_FEAT_ZVEI
+    if (ZVEI_Pending()) {   // on-demand ZVEI burst: no DTMF PTT-ID, the main loop unkeys
+        ZVEI_Transmit();
+        return;
+    }
+#endif
 
     DTMF_Reply();
 

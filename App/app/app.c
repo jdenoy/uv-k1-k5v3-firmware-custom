@@ -36,6 +36,9 @@
     #include "app/fm.h"
 #endif
 #include "app/generic.h"
+#ifdef ENABLE_FEAT_ZVEI
+    #include "app/zvei.h"
+#endif
 #include "app/main.h"
 #include "app/menu.h"
 #ifdef ENABLE_FEAT_F4HWN_RXTX_LOG
@@ -2681,6 +2684,15 @@ Skip:
         RADIO_PrepareTX();
         gFlagPrepareTX = false;
     }
+
+#ifdef ENABLE_FEAT_ZVEI
+    if (gZveiEndTx) {       // ZVEI burst sent: end the transmission like a PTT release
+        gZveiEndTx = false;
+        if (gCurrentFunction == FUNCTION_TRANSMIT)
+            GENERIC_Key_PTT(false);
+        gZveiTx = false;
+    }
+#endif
 
 #ifdef ENABLE_VOICE
     if (gAnotherVoiceID != VOICE_ID_INVALID) {

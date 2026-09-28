@@ -14,6 +14,9 @@
  *     limitations under the License.
  */
 
+#ifdef ENABLE_FEAT_ZVEI
+    #include "app/zvei.h"
+#endif
 #include <string.h>
 
 #if !defined(ENABLE_OVERLAY)
@@ -338,6 +341,19 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
             *pMax = ARRAY_SIZE(gSubMenu_PTT_ID) - 1;
             break;
 
+#ifdef ENABLE_FEAT_ZVEI
+        case MENU_ZVEI:
+            //*pMin = 0;
+            *pMax = ZVEI_TYPE_COUNT - 1;
+            break;
+
+        case MENU_ZV_CD1:
+        case MENU_ZV_CD2:
+            //*pMin = 0;
+            *pMax = ZVEI_CODE_NONE;     // 00000..99999, then OFF
+            break;
+#endif
+
         case MENU_BAT_TXT:
             //*pMin = 0;
             *pMax = ARRAY_SIZE(gSubMenu_BAT_TXT) - 1;
@@ -615,6 +631,9 @@ void MENU_AcceptSetting(void)
             return;
 
         case MENU_MEM_CH:
+#ifdef ENABLE_FEAT_ZVEI
+            ZVEI_Copy(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, (uint16_t)gSubMenuSelection);
+#endif
             gTxVfo->CHANNEL_SAVE = gSubMenuSelection;
             #if 0
                 gEeprom.MrChannel[0] = gSubMenuSelection;
@@ -791,6 +810,22 @@ void MENU_AcceptSetting(void)
             gRequestSaveChannel         = 1;
             return;
 
+#ifdef ENABLE_FEAT_ZVEI
+        case MENU_ZVEI:
+        case MENU_ZV_CD1:
+        case MENU_ZV_CD2:
+        {   // stored in the channel's ZVEI record, not in the channel itself
+            ZVEI_Channel_t z;
+            ZVEI_Load(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, &z);
+            if (UI_MENU_GetCurrentMenuId() == MENU_ZVEI)
+                z.type = (uint8_t)gSubMenuSelection;
+            else
+                z.code[UI_MENU_GetCurrentMenuId() == MENU_ZV_CD2] = (uint32_t)gSubMenuSelection;
+            ZVEI_Save(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, &z);
+            return;
+        }
+#endif
+
         case MENU_BAT_TXT:
             gSetting_battery_text = gSubMenuSelection;
             break;
@@ -848,6 +883,9 @@ void MENU_AcceptSetting(void)
 
         case MENU_DEL_CH:
             SETTINGS_UpdateChannel(gSubMenuSelection, NULL, false);
+#ifdef ENABLE_FEAT_ZVEI
+            ZVEI_Clear((uint16_t)gSubMenuSelection);
+#endif
             gVfoConfigureMode = VFO_CONFIGURE_RELOAD;
             gFlagResetVfos    = true;
             return;
@@ -1300,6 +1338,19 @@ void MENU_ShowCurrentSetting(void)
             gSubMenuSelection = gTxVfo->DTMF_PTT_ID_TX_MODE;
             break;
 
+#ifdef ENABLE_FEAT_ZVEI
+        case MENU_ZVEI:
+        case MENU_ZV_CD1:
+        case MENU_ZV_CD2:
+        {
+            ZVEI_Channel_t z;
+            ZVEI_Load(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, &z);
+            gSubMenuSelection = UI_MENU_GetCurrentMenuId() == MENU_ZVEI ? z.type
+                              : (int32_t)z.code[UI_MENU_GetCurrentMenuId() == MENU_ZV_CD2];
+            break;
+        }
+#endif
+
         case MENU_BAT_TXT:
             gSubMenuSelection = gSetting_battery_text;
             return;
@@ -1673,6 +1724,23 @@ static void MENU_Key_0_to_9(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         gInputBoxIndex = 0;
         return;
     }
+
+#ifdef ENABLE_FEAT_ZVEI
+    if (UI_MENU_GetCurrentMenuId() == MENU_ZV_CD1 || UI_MENU_GetCurrentMenuId() == MENU_ZV_CD2)
+    {   // 5 digits, leading zeros kept (00000..99999)
+        if (gInputBoxIndex < ZVEI_DIGITS)
+        {
+            gRequestDisplayScreen = DISPLAY_MENU;
+            return;
+        }
+        int32_t code = 0;
+        for (uint8_t i = 0; i < ZVEI_DIGITS; i++)
+            code = code * 10 + gInputBox[i];
+        gSubMenuSelection = code;
+        gInputBoxIndex    = 0;
+        return;
+    }
+#endif
 
     const int m = UI_MENU_GetCurrentMenuId();
 

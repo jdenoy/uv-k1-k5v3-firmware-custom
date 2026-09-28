@@ -18,6 +18,7 @@
             "binaryDir": "${sourceDir}/build/${presetName}",
             "toolchainFile": "${sourceDir}/cmake/gcc-arm-none-eabi.cmake",
             "cacheVariables": {
+                "ENABLE_FEAT_ZVEI": false,
                 "CMAKE_BUILD_TYPE": "Release",
                 "DEV": false,
                 "ENABLE_LTO": false,
@@ -104,6 +105,7 @@
             "name": "Custom",
             "inherits": "default",
             "cacheVariables": {
+                "ENABLE_FEAT_ZVEI": true,
                 "ENABLE_FEAT_F4HWN_QRCODE": true,
                 "ENABLE_FEAT_F4HWN_MEM": true,
                 "EDITION_STRING": "Custom",
@@ -176,6 +178,8 @@
             "name": "Labs",
             "inherits": "Fusion",
             "cacheVariables": {
+                "ENABLE_FEAT_ZVEI": true,
+                "BUILD_TAG": "ZV1",
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": true,
                 "ENABLE_FEAT_F4HWN_FOXHUNT": false,
                 "ENABLE_FEAT_F4HWN_BEACON": false,

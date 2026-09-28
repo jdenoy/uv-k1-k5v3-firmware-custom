@@ -131,8 +131,10 @@ enum ACTION_OPT_t {
     ACTION_OPT_REMOVE_OFFSET  = 21,
     ACTION_OPT_FOXHUNT        = 22,
     ACTION_OPT_BEACON         = 23,
+    ACTION_OPT_ZVEI_1         = 24,     /* send the channel's ZVEI code 1 */
+    ACTION_OPT_ZVEI_2         = 25,     /* send the channel's ZVEI code 2 */
 
-    ACTION_OPT_LEN            = 24
+    ACTION_OPT_LEN            = 26
 };
 
 #ifdef ENABLE_VOICE

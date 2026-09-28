@@ -22,6 +22,9 @@
     #include "app/fm.h"
 #endif
 #include "app/scanner.h"
+#ifdef ENABLE_FEAT_ZVEI
+    #include "app/zvei.h"
+#endif
 #include "audio.h"
 #include "driver/bk4819.h"
 #include "driver/eeprom.h"
@@ -79,6 +82,13 @@ void DTMF_clear_RX(void)
 
 void DTMF_SendEndOfTransmission(void)
 {
+#ifdef ENABLE_FEAT_ZVEI
+    if (gZveiTx) {          // a ZVEI burst replaces the DTMF PTT-ID
+        BK4819_ExitDTMF_TX(true);
+        return;
+    }
+#endif
+
     if (gCurrentVfo->DTMF_PTT_ID_TX_MODE == PTT_ID_APOLLO) {
         BK4819_PlaySingleTone(2475, 250, 28, gEeprom.DTMF_SIDE_TONE);
     }
