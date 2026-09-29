@@ -40,6 +40,13 @@ Example: `11223` in ZVEI-1 is sent as 1060, 2600, 1160, 2600, 1270 Hz; in CCIR
 as 1124, 2110, 1197, 2110, 1275 Hz.
 Sources: sigidwiki "ZVEI Selcall" and "CCIR Selcall", Wikipedia "CCIR (selcall)".
 
+Cross-checked 2026-09-29 against the decoder tables of multimon-ng (commit
+`0722194`, `demod_zvei1.c`, `demod_zvei2.c`, `demod_ccir.c`): digits 0-9 and
+the repeat tone (index E) are identical for ZVEI-1, ZVEI-2 and CCIR. multimon-ng
+prints a symbol at each tone change, whatever its duration, so CCIR-1 (100 ms)
+and CCIR-2 (70 ms) both decode with `-a CCIR`, and the repeat tone is shown as
+`E`: `11223` decodes as `1E2E3`.
+
 ## Storage
 
 One 8-byte record per channel in each config bank, at physical address
