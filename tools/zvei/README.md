@@ -47,16 +47,47 @@ One 8-byte record per channel in each config bank, at physical address
 - `[0]` type (0 off, 1 ZVEI-1, 2 ZVEI-2), `[1..3]` code 1 (24-bit LE),
   `[4..6]` code 2, `[7]` reserved; erased flash (`0xFF`) = off, no code
 
-This area is outside the EEPROM-compatible map (`driver/eeprom_compat.c`):
-the bank uses `0x0000-0x886E`, `0x9000-0x90E8`, `0xA000-0xA170`, and **CHIRP
-never reads or writes it** (the driver uploads up to `0xA170`). Consequences:
+Physically this area is free in every bank (the bank uses `0x0000-0x886E`,
+`0x9000-0x90E8`, `0xA000-0xA170`). Since build ZV2 it is also exposed to the
+serial link through the EEPROM-compatible map (`driver/eeprom_compat.c`):
+legacy addresses **`0xD000-0xF06F`** map to `0xB000-0xD06F` of the active bank.
+This is how the CHIRP driver below reads and writes it.
 
-- A CHIRP upload does not erase or change the ZVEI settings.
-- CHIRP does not show them, and a channel moved or recreated in CHIRP keeps the
-  ZVEI record of its slot number, not of its content.
 - On the radio: saving a VFO to a memory copies the VFO's ZVEI record, deleting
   a channel clears it, a factory reset erases all records.
 - Records are per config bank, like the channels (multiboot).
+- With the original CHIRP driver the area is untouched (it uploads up to
+  `0xA170`); it neither shows nor erases the ZVEI settings.
+
+## CHIRP driver
+
+`tools/zvei/chirp/f4hwn.chirp.v6.0.0-zvei.py` is Armel's
+`f4hwn.chirp.v6.0.0.py` (release v6.0.0) with ZVEI support. Load it in CHIRP with
+*File > Load Module*; it keeps the original's radio identity and replaces it.
+
+- Each channel's **Extra** tab (memories and VFOs) shows **ZVEI type** (OFF /
+  ZVEI-1 / ZVEI-2), **ZVEI code 1** and **ZVEI code 2** (5 digits, or empty for
+  none; anything else is refused).
+- The key-action lists offer **ZVEI 1** and **ZVEI 2** (values 24 and 25).
+- Download reads up to `0xF080` (the ZVEI window included); upload writes the
+  usual area, the calibration if enabled, then the ZVEI window.
+- Deleting a channel in CHIRP clears its ZVEI record, as on the radio. Copy and
+  paste of a channel carries its ZVEI settings with the other extras.
+- Images saved with the original driver (smaller) still open: they are padded
+  with `0xFF`, i.e. ZVEI off. The original driver also opens images saved with
+  this one.
+- With a firmware without the ZVEI window (other presets, or ZVEI build ZV1),
+  the window reads as `0xFF` (ZVEI off everywhere) and writes are ignored:
+  nothing breaks, the settings are just not stored.
+
+Tested against the CHIRP source (kk7ds/chirp, 2026-09-27) with the real `bitwise`
+parser and settings classes: 17 scenarios (old image padding, extras on empty
+and used channels, raw record layout, round trip, clearing, last memory and VFO
+indexes, delete, validation of 3/6 digits and letters, key actions, upload areas
+with calibration off, download size, and cross-compatibility with the original
+driver). Not yet run inside the CHIRP application against a radio.
+Scripts: `tools/zvei/chirp/test_chirp_zvei.py` and `test_compat_original.py`
+(setup and usage in their headers).
 
 ## Side-key actions
 
@@ -82,9 +113,10 @@ the same tone (its squelch must open during the burst).
 
 ## Build identification
 
-The Labs preset sets `BUILD_TAG` (e.g. `ZV1`), appended to the version shown on
+The Labs preset sets `BUILD_TAG` (`ZV1`: first ZVEI build; `ZV2`: ZVEI window
+for CHIRP), appended to the version shown on
 the welcome screen (`v6.0.0 ZV1`). It is display only: `VERSION_STRING_2` is
 compared with the stored version at boot, and changing it resets the key/menu
 locks, `SET_KEY`, display inversion and the boot-message lines.
 
-Flash cost (Labs): +1,472 bytes (113,408 of 120,832).
+Flash cost (Labs): +1,480 bytes (113,432 of 120,832, build ZV2).

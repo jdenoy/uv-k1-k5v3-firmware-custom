@@ -32,6 +32,9 @@
  *   ZVEI_BASE + index * 8, index = MR channel 0..1023, then 1024 + band * 2 + vfo
  *   [0] type  [1..3] code 1 (24-bit LE)  [4..6] code 2  [7] reserved
  * Erased flash (0xFF) reads as type off and no code.
+ *
+ * Serial access (CHIRP): EEPROM-compatible addresses ZVEI_EEPROM_BASE (0xD000)
+ * to 0xF06F map to this table in the active bank (driver/eeprom_compat.c).
  */
 
 #ifndef APP_ZVEI_H
@@ -52,6 +55,14 @@ enum {
 #define ZVEI_CODE_NONE    100000u     /* menu value and API value for "no code" */
 #define ZVEI_TONE_MS      70u
 #define ZVEI_PRELOAD_MS   300u        /* carrier (+ CTCSS) before the tones */
+
+/* Record table: physical address in each config bank, and the window of the
+ * EEPROM-compatible map through which the serial link (CHIRP) reaches it. */
+#define ZVEI_BASE         0x00B000u   /* physical, 3 sectors: 0xB000-0xDFFF   */
+#define ZVEI_REC_SIZE     8u
+#define ZVEI_RECORDS      (1024u + 14u)   /* MR channels, then 7 bands x 2 VFOs */
+#define ZVEI_EEPROM_BASE  0xD000u     /* logical window 0xD000-0xF06F          */
+#define ZVEI_EEPROM_END   (ZVEI_EEPROM_BASE + ZVEI_RECORDS * ZVEI_REC_SIZE)
 
 typedef struct {
     uint8_t  type;                    /* ZVEI_OFF / ZVEI_TYPE_1 / ZVEI_TYPE_2 */

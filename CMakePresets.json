@@ -179,7 +179,7 @@
             "inherits": "Fusion",
             "cacheVariables": {
                 "ENABLE_FEAT_ZVEI": true,
-                "BUILD_TAG": "ZV1",
+                "BUILD_TAG": "ZV2",
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": true,
                 "ENABLE_FEAT_F4HWN_FOXHUNT": false,
                 "ENABLE_FEAT_F4HWN_BEACON": false,

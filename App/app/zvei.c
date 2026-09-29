@@ -29,10 +29,9 @@
 
 /* Free physical area of each config bank: the bank uses 0x0000-0x886E,
  * 0x9000-0x90E8 and 0xA000-0xA170 (see driver/eeprom_compat.c); CHIRP writes
- * up to 0xA170. 1038 records x 8 bytes = 8304 bytes -> 3 sectors. */
-#define ZVEI_BASE         0x00B000u
+ * up to 0xA170 in its own map. 1038 records x 8 bytes = 8304 bytes -> 3 sectors
+ * (ZVEI_BASE and the record layout are in zvei.h). */
 #define ZVEI_SECTORS      3u
-#define ZVEI_REC_SIZE     8u
 #define ZVEI_TONE_GAIN    66u         /* TONE1 tuning gain, same as the 1750 Hz tone */
 #define ZVEI_NO_INDEX     0xFFFFu
 
