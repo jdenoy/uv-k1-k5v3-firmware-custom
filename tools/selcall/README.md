@@ -129,7 +129,8 @@ set to the same tone (its squelch must open during the burst).
 received with an RTL-SDR decode correctly in multimon-ng for ZVEI-1, ZVEI-2 and
 CCIR. multimon-ng does not tell CCIR-1 from CCIR-2 (same tones, only the
 duration differs: 100 ms vs 70 ms); the duration was not measured separately.
-Still to check: the CTCSS during the burst.
+The channel's CTCSS is transmitted during the burst (checked with a second radio
+set to the same tone): selcall tones and CTCSS OK on TX.
 
 ## Build identification
 
