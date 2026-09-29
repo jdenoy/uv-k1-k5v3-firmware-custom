@@ -157,6 +157,13 @@ with 2600 / 970 Hz repeats, each classified correctly. The detected length of a
 tone reads 5-7 ms short (transition blur of the 20 ms window); the spacing does
 not.
 
+The first version found no tone in a real recording: rtl_fm outputs the FM
+discriminator unfiltered, so most of the power was reception noise above 3 kHz
+(plus the CTCSS), and the tones carried only 20-35 % of it. The audio is now
+limited to 300-3000 Hz before analysis. Real burst from the UV-K1 (ZVEI code
+87654): 5 tones at 69-72 ms spacing, 2000/1830/1670/1530/1400 Hz, first tone
+about 300 ms after the carrier appears (the preload).
+
 ## Build identification
 
 The Labs preset sets `BUILD_TAG`, appended to the version shown on the welcome

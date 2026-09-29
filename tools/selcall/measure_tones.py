@@ -12,7 +12,9 @@ Input: the FM-demodulated audio of the burst, either a WAV file or raw signed
 
     measure_tones.py burst.wav
 
-Method: 20 ms analysis window moved in 1 ms steps; in each window, the strongest
+Method: the audio is first limited to 300-3000 Hz (removes the CTCSS and the
+noise of an unfiltered FM discriminator), then a 20 ms analysis window is moved
+in 1 ms steps; in each window, the strongest
 of the known selcall frequencies (ZVEI and CCIR digits and repeat tones) is kept
 if it clearly dominates; consecutive windows with the same tone form one tone.
 The detected length of a tone is a few ms short (the window straddles two tones
@@ -59,7 +61,17 @@ def load(path, rate):
     return np.fromfile(path, "<i2").astype(float), rate
 
 
+def bandpass(x, rate, lo=300.0, hi=3000.0):
+    """keep the selcall band: removes the CTCSS/DCS (< 300 Hz) and the noise that
+    an unfiltered FM discriminator (rtl_fm) puts above 3 kHz"""
+    spec = np.fft.rfft(x)
+    f = np.fft.rfftfreq(len(x), 1 / rate)
+    spec[(f < lo) | (f > hi)] = 0
+    return np.fft.irfft(spec, len(x))
+
+
 def measure(x, rate, win_ms=20.0, step_ms=1.0, dominance=0.6, min_ms=15.0):
+    x = bandpass(x, rate)
     freqs = sorted(set(ZVEI) | set(CCIR) | set(REPEAT))
     n = int(rate * win_ms / 1000)
     step = max(1, int(rate * step_ms / 1000))
