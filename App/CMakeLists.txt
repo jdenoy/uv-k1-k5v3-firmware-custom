@@ -241,10 +241,10 @@ enable_feature(ENABLE_FEAT_F4HWN_RXTX_LOG
 )
 enable_feature(ENABLE_FEAT_F4HWN_FOXHUNT)
 enable_feature(ENABLE_FEAT_F4HWN_BEACON)
-# ZVEI selective calling (5-tone), sent on demand per channel (app/zvei.h)
-enable_feature(ENABLE_FEAT_ZVEI
-    app/zvei.c
-    app/zvei_seq.c
+# Selective calling (5-tone: ZVEI-1/2, CCIR-1/2), sent on demand per channel (app/selcall.h)
+enable_feature(ENABLE_FEAT_SELCALL
+    app/selcall.c
+    app/selcall_seq.c
 )
 if(ENABLE_FEAT_F4HWN_FOXHUNT OR ENABLE_FEAT_F4HWN_BEACON)
     target_sources(App INTERFACE app/foxhunt.c)

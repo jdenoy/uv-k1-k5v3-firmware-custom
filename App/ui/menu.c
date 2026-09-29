@@ -14,8 +14,8 @@
  *     limitations under the License.
  */
 
-#ifdef ENABLE_FEAT_ZVEI
-    #include "app/zvei.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
 #endif
 #include <assert.h>
 #include <string.h>
@@ -121,10 +121,10 @@ const t_menu_item MenuList[] =
     {"UPCode",      MENU_UPCODE        },
     {"DWCode",      MENU_DWCODE        },
     {"PTT ID",      MENU_PTT_ID        },
-#ifdef ENABLE_FEAT_ZVEI
-    {"ZVEI",        MENU_ZVEI          },
-    {"ZV CD1",      MENU_ZV_CD1        },
-    {"ZV CD2",      MENU_ZV_CD2        },
+#ifdef ENABLE_FEAT_SELCALL
+    {"SelCal",      MENU_SELCALL       },
+    {"SC CD1",      MENU_SC_CD1        },
+    {"SC CD2",      MENU_SC_CD2        },
 #endif
     {"D ST",        MENU_D_ST          },
 #ifdef ENABLE_DTMF_CALLING
@@ -505,8 +505,8 @@ const t_sidefunction gSubMenu_SIDEFUNCTIONS[] =
     {"REMOVE\nOFFSET",  ACTION_OPT_REMOVE_OFFSET},
     {"FOX HUNT",        ACTION_OPT_FOXHUNT},
     {"BEACON",          ACTION_OPT_BEACON},
-    {"ZVEI 1",          ACTION_OPT_ZVEI_1},
-    {"ZVEI 2",          ACTION_OPT_ZVEI_2},
+    {"SELCALL 1",       ACTION_OPT_SELCALL_1},
+    {"SELCALL 2",       ACTION_OPT_SELCALL_2},
 };
 
 const uint8_t gSubMenu_SIDEFUNCTIONS_size = ARRAY_SIZE(gSubMenu_SIDEFUNCTIONS);
@@ -576,8 +576,8 @@ static const uint8_t CatChannels[] = {
     MENU_SET_NFM,
 #endif
     MENU_BCL, MENU_COMPAND, MENU_AM, MENU_TX_LOCK, MENU_PTT_ID,
-#ifdef ENABLE_FEAT_ZVEI
-    MENU_ZVEI, MENU_ZV_CD1, MENU_ZV_CD2,
+#ifdef ENABLE_FEAT_SELCALL
+    MENU_SELCALL, MENU_SC_CD1, MENU_SC_CD2,
 #endif
     MENU_LIST_CH,
     MENU_MEM_CH, MENU_DEL_CH, MENU_MEM_NAME,
@@ -1380,22 +1380,21 @@ void UI_DisplayMenu(void)
             strcpy(String, gSubMenu_PTT_ID[gSubMenuSelection]);
             break;
 
-#ifdef ENABLE_FEAT_ZVEI
-        case MENU_ZVEI:
-            strcpy(String, gSubMenuSelection == ZVEI_TYPE_1 ? "ZVEI-1" :
-                           gSubMenuSelection == ZVEI_TYPE_2 ? "ZVEI-2" : "OFF");
+#ifdef ENABLE_FEAT_SELCALL
+        case MENU_SELCALL:
+            strcpy(String, gSelCallTypeNames[gSubMenuSelection < SELCALL_TYPE_COUNT ? gSubMenuSelection : SELCALL_OFF]);
             break;
 
-        case MENU_ZV_CD1:
-        case MENU_ZV_CD2:
+        case MENU_SC_CD1:
+        case MENU_SC_CD2:
             if (gIsInSubMenu && gInputBoxIndex > 0)
             {   // digits typed so far, '-' for the missing ones
                 const char *ascii = INPUTBOX_GetAscii();
-                for (uint8_t i = 0; i < ZVEI_DIGITS; i++)
+                for (uint8_t i = 0; i < SELCALL_DIGITS; i++)
                     String[i] = i < gInputBoxIndex ? ascii[i] : '-';
-                String[ZVEI_DIGITS] = 0;
+                String[SELCALL_DIGITS] = 0;
             }
-            else if (gSubMenuSelection >= (int32_t)ZVEI_CODE_NONE)
+            else if (gSubMenuSelection >= (int32_t)SELCALL_CODE_NONE)
                 strcpy(String, "OFF");
             else
                 sprintf(String, "%05u", (unsigned)gSubMenuSelection);

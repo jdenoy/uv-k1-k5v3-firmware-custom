@@ -15,8 +15,8 @@
  *     limitations under the License.
  */
 
-#ifdef ENABLE_FEAT_ZVEI
-    #include "app/zvei.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
 #endif
 #include <string.h>
 
@@ -746,8 +746,8 @@ void SETTINGS_FactoryReset(bool bIsAll)
         PY25Q16_SectorErase(addr);
     }
 
-#ifdef ENABLE_FEAT_ZVEI
-    ZVEI_EraseAll();    // per-channel ZVEI records go with the channels
+#ifdef ENABLE_FEAT_SELCALL
+    SELCALL_EraseAll();    // per-channel selcall records go with the channels
 #endif
     
     // 0d60 - 0e30

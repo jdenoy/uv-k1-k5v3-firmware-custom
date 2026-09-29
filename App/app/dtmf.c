@@ -22,8 +22,8 @@
     #include "app/fm.h"
 #endif
 #include "app/scanner.h"
-#ifdef ENABLE_FEAT_ZVEI
-    #include "app/zvei.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
 #endif
 #include "audio.h"
 #include "driver/bk4819.h"
@@ -82,8 +82,8 @@ void DTMF_clear_RX(void)
 
 void DTMF_SendEndOfTransmission(void)
 {
-#ifdef ENABLE_FEAT_ZVEI
-    if (gZveiTx) {          // a ZVEI burst replaces the DTMF PTT-ID
+#ifdef ENABLE_FEAT_SELCALL
+    if (gSelCallTx) {          // a selcall burst replaces the DTMF PTT-ID
         BK4819_ExitDTMF_TX(true);
         return;
     }

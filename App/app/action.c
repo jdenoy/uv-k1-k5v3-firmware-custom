@@ -14,8 +14,8 @@
  *     limitations under the License.
  */
 
-#ifdef ENABLE_FEAT_ZVEI
-    #include "app/zvei.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
 #endif
 #include <assert.h>
 #include <string.h>
@@ -72,9 +72,9 @@ static void ACTION_Scan_FM(bool bRestart);
 #ifdef ENABLE_TX1750
 static void ACTION_1750(void);
 #endif
-#ifdef ENABLE_FEAT_ZVEI
-static void ACTION_Zvei1(void);
-static void ACTION_Zvei2(void);
+#ifdef ENABLE_FEAT_SELCALL
+static void ACTION_SelCall1(void);
+static void ACTION_SelCall2(void);
 #endif
 
 inline static void ACTION_ScanRestart() { ACTION_Scan(true); };
@@ -136,9 +136,9 @@ void (*const action_opt_table[ACTION_OPT_LEN])(void) = {
 #if defined(ENABLE_FEAT_F4HWN_BEACON) || defined(ENABLE_FEAT_F4HWN_OVERLAY_APPS)
     [ACTION_OPT_BEACON] = &ACTION_Beacon,
 #endif
-#ifdef ENABLE_FEAT_ZVEI
-    [ACTION_OPT_ZVEI_1] = &ACTION_Zvei1,
-    [ACTION_OPT_ZVEI_2] = &ACTION_Zvei2,
+#ifdef ENABLE_FEAT_SELCALL
+    [ACTION_OPT_SELCALL_1] = &ACTION_SelCall1,
+    [ACTION_OPT_SELCALL_2] = &ACTION_SelCall2,
 #endif
 };
 
@@ -149,8 +149,8 @@ static_assert(ACTION_OPT_POWER_HIGH == 20);
 static_assert(ACTION_OPT_REMOVE_OFFSET == 21);
 static_assert(ACTION_OPT_FOXHUNT == 22);
 static_assert(ACTION_OPT_BEACON == 23);
-static_assert(ACTION_OPT_ZVEI_1 == 24);
-static_assert(ACTION_OPT_ZVEI_2 == 25);
+static_assert(ACTION_OPT_SELCALL_1 == 24);
+static_assert(ACTION_OPT_SELCALL_2 == 25);
 
 bool ACTION_IsAvailable(uint8_t action)
 {
@@ -660,11 +660,11 @@ static void ACTION_1750(void)
 }
 #endif
 
-#ifdef ENABLE_FEAT_ZVEI
+#ifdef ENABLE_FEAT_SELCALL
 // Key up with the channel's normal TX settings (CTCSS/DCS included), send the
-// channel's ZVEI code, unkey: see app/zvei.h. Refused (double beep) if the
-// channel has no ZVEI type or no such code.
-static void ACTION_Zvei(uint8_t which)
+// channel's selcall code (ZVEI-1/2, CCIR-1/2), unkey: see app/selcall.h. Refused
+// (double beep) if the channel has no selcall type or no such code.
+static void ACTION_SelCall(uint8_t which)
 {
 #ifdef ENABLE_FEAT_F4HWN
     if(gEeprom.KEY_LOCK && (gSetting_set_lck & SET_LCK_PTT))
@@ -673,7 +673,7 @@ static void ACTION_Zvei(uint8_t which)
     if (gCurrentFunction == FUNCTION_TRANSMIT)
         return;
 
-    if (!ZVEI_Request(which)) {
+    if (!SELCALL_Request(which)) {
         gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
         return;
     }
@@ -685,8 +685,8 @@ static void ACTION_Zvei(uint8_t which)
         gRequestDisplayScreen = DISPLAY_MAIN;
 }
 
-static void ACTION_Zvei1(void) { ACTION_Zvei(0); }
-static void ACTION_Zvei2(void) { ACTION_Zvei(1); }
+static void ACTION_SelCall1(void) { ACTION_SelCall(0); }
+static void ACTION_SelCall2(void) { ACTION_SelCall(1); }
 #endif
 
 #ifdef ENABLE_VOX

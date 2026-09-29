@@ -24,8 +24,8 @@
 
 #include "driver/eeprom.h"
 #include "driver/py25q16.h"
-#ifdef ENABLE_FEAT_ZVEI
-    #include "app/zvei.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
 #endif
 #include <string.h>
 
@@ -76,9 +76,9 @@ static const AddrMapping_t ADDR_MAPPINGS[] = {
 
     _MK_MAPPING(0x010000, 0x00B000, 0x00B200),  // Calibration 512 Bytes!!!
 
-#ifdef ENABLE_FEAT_ZVEI
-    // ZVEI per-channel records, 1038 * 8 Bytes (app/zvei.h), serial/CHIRP access
-    _MK_MAPPING(ZVEI_BASE, ZVEI_EEPROM_BASE, ZVEI_EEPROM_END),
+#ifdef ENABLE_FEAT_SELCALL
+    // Selcall per-channel records, 1038 * 8 Bytes (app/selcall.h), serial/CHIRP access
+    _MK_MAPPING(SELCALL_BASE, SELCALL_EEPROM_BASE, SELCALL_EEPROM_END),
 #endif
 
     _MK_MAPPING(0x011000, 0x00C000, 0x00D000),  // Boot Logo sector (4 KB):

@@ -54,7 +54,7 @@ DEBUG_SHOW_OBFUSCATED_COMMANDS = False
 DEBUG_SHOW_MEMORY_ACTIONS = False
 
 # TODO: remove the driver version when it's in mainline chirp 
-DRIVER_VERSION = "Quansheng UV-K1 / UV-K5 V3 driver ver: 2026/08/30 (c) F4HWN v6.0.0 + ZVEI 2026/09/29 (F4WAT)"
+DRIVER_VERSION = "Quansheng UV-K1 / UV-K5 V3 driver ver: 2026/08/30 (c) F4HWN v6.0.0 + SelCall ZVEI/CCIR 2026/09/29 (F4WAT)"
 FIRMWARE_VERSION_UPDATE = "https://github.com/armel/uv-k1-k5v3-firmware-custom/releases"
 CHIRP_DRIVER_VERSION_UPDATE = "https://github.com/armel/uv-k1-k5v3-firmware-custom/releases"
 
@@ -430,18 +430,18 @@ struct {
 } cal;
 
 // --------------------
-// ZVEI per-channel records (firmware with ENABLE_FEAT_ZVEI): EEPROM-compatible
-// window 0xD000-0xF06F, index = channel (0-1023), then 1024 + band * 2 + vfo.
-// Erased (0xFF): type OFF, no code. On a firmware without ZVEI the window
-// reads as 0xFF and writes are ignored.
+// Selcall per-channel records (firmware with ENABLE_FEAT_SELCALL): EEPROM-
+// compatible window 0xD000-0xF06F, index = channel (0-1023), then
+// 1024 + band * 2 + vfo. Erased (0xFF): type OFF, no code. On a firmware
+// without it the window reads as 0xFF and writes are ignored.
 
 #seekto 0x00D000;
 struct {
-    u8 type;        // 0 OFF, 1 ZVEI-1, 2 ZVEI-2
+    u8 type;        // 0 OFF, 1 ZVEI-1, 2 ZVEI-2, 3 CCIR-1, 4 CCIR-2
     ul24 code1;     // 0..99999, 0xFFFFFF = none
     ul24 code2;
     u8 reserved;
-} zvei[1038];
+} selcall[1038];
 
 """
 # F4HWN parameter
@@ -660,9 +660,9 @@ VOX_LIST = ["OFF", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
 MEM_SIZE =      0x00B190    # end of the calibration area (was: size of all memory)
 PROG_SIZE =     0x00A171    # size of the memory that we will write (LAST ADDRESS + 1 !!!)
-ZVEI_START =    0x00D000    # ZVEI records window (firmware ENABLE_FEAT_ZVEI)
-ZVEI_END =      0x00F080    # 0xD000 + 1038 * 8 = 0xF070, rounded up to MEM_BLOCK
-IMAGE_SIZE =    ZVEI_END    # size of a downloaded image
+SELCALL_START = 0x00D000    # selcall records window (firmware ENABLE_FEAT_SELCALL)
+SELCALL_END =   0x00F080    # 0xD000 + 1038 * 8 = 0xF070, rounded up to MEM_BLOCK
+IMAGE_SIZE =    SELCALL_END # size of a downloaded image
 MEM_BLOCK =     0x80        # largest block of memory that we can reliably write
 CAL_START =     0x00B000    # calibration memory start address
 F4HWN_START =   0x00A158    # calibration F4HWN memory start address
@@ -722,26 +722,26 @@ KEYACTIONS_LIST = ["NONE",
                    "REMOVE OFFSET",
                    "FOX HUNT",
                    "BEACON",
-                   "ZVEI 1",
-                   "ZVEI 2"
+                   "SELCALL 1",
+                   "SELCALL 2"
                   ]
 
-ZVEI_TYPE_LIST = ["OFF", "ZVEI-1", "ZVEI-2"]
-ZVEI_CODE_NONE = 0xFFFFFF
-ZVEI_CODE_CHARS = "0123456789"
+SELCALL_TYPE_LIST = ["OFF", "ZVEI-1", "ZVEI-2", "CCIR-1", "CCIR-2"]
+SELCALL_CODE_NONE = 0xFFFFFF
+SELCALL_CODE_CHARS = "0123456789"
 
 
-def zvei_code_str(value):
+def selcall_code_str(value):
     """24-bit stored code -> 5-digit string, or empty if none"""
     value = int(value)
     return "%05d" % value if value <= 99999 else ""
 
 
-def zvei_code_validate(value):
-    """a ZVEI code is empty (no code) or exactly 5 digits"""
+def selcall_code_validate(value):
+    """a selcall code is empty (no code) or exactly 5 digits"""
     value = str(value).strip()
     if value and (len(value) != 5 or not value.isdigit()):
-        raise InvalidValueError("ZVEI code: 5 digits (00000-99999), or empty for none")
+        raise InvalidValueError("SelCall code: 5 digits (00000-99999), or empty for none")
     return value
 
 MIC_GAIN_LIST = ["+1.5dB", "+4.0dB", "+8.0dB", "+12.0dB", "+16.0dB", "+20.0dB", "+24.0dB", "+28.0dB", "+31.5dB"]
@@ -994,14 +994,14 @@ def do_upload(radio):
             radio.status_fn(status)
 
         elif step == 2:
-            # ZVEI records window (ignored by a firmware without ZVEI)
-            if len(radio.get_mmap()) < ZVEI_END:
+            # selcall records window (ignored by a firmware without it)
+            if len(radio.get_mmap()) < SELCALL_END:
                 break
-            start_addr = ZVEI_START
-            stop_addr  = ZVEI_END
+            start_addr = SELCALL_START
+            stop_addr  = SELCALL_END
             status.max = stop_addr - start_addr
             status.cur = 0
-            status.msg = "Uploading ZVEI codes"
+            status.msg = "Uploading SelCall codes"
             radio.status_fn(status)
 
         else:
@@ -1076,7 +1076,7 @@ def f4hwn_set_scn_to_storage(value):
 class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
     """Quansheng UV-K5 (egzumer + f4hwn)"""
     VENDOR = "Quansheng"
-    MODEL = "UV-K1 & UV-K5 V3 (F4HWN) ZVEI1&2"
+    MODEL = "UV-K1 & UV-K5 V3 (F4HWN) SELCALL"
     BAUD_RATE = 38400
     NEEDS_COMPAT_SERIAL = False
     FIRMWARE_VERSION = ""
@@ -1242,8 +1242,8 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
 
     # Convert the raw byte array into a memory object structure
     def process_mmap(self):
-        # Images saved by a driver without ZVEI stop at 0xB190: pad them with
-        # 0xFF (erased = ZVEI off) so the ZVEI window can be parsed.
+        # Images saved by a driver without SelCall stop at 0xB190: pad them with
+        # 0xFF (erased = selcall off) so the selcall window can be parsed.
         size = len(self._mmap)
         if size < IMAGE_SIZE:
             self._mmap = memmap.MemoryMapBytes(
@@ -1454,7 +1454,7 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
             rs = RadioSetting("scanlists", "Scanlists", val)
             mem.extra.append(rs)
 
-            self._append_zvei_extra(mem, ch_num)
+            self._append_selcall_extra(mem, ch_num)
 
             # actually the step and duplex are overwritten by chirp based on
             # bandplan. they are here to document sane defaults for IARU r1
@@ -1593,29 +1593,30 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         rs.set_doc('SList: Is this frequency is part of a scan list?')
         mem.extra.append(rs)
 
-        self._append_zvei_extra(mem, ch_num)
+        self._append_selcall_extra(mem, ch_num)
 
         return mem
 
-    def _append_zvei_extra(self, mem, ch_num):
-        """ZVEI type and codes of a channel (firmware with ENABLE_FEAT_ZVEI)"""
-        _zv = self._memobj.zvei[ch_num]
+    def _append_selcall_extra(self, mem, ch_num):
+        """selcall type and codes of a channel (firmware with ENABLE_FEAT_SELCALL)"""
+        _sc = self._memobj.selcall[ch_num]
 
-        ztype = int(_zv.type) if int(_zv.type) < len(ZVEI_TYPE_LIST) else 0
-        val = RadioSettingValueList(ZVEI_TYPE_LIST, None, ztype)
-        rs = RadioSetting("zvei_type", "ZVEI type (ZVEI)", val)
-        rs.set_doc('ZVEI: 5-tone selective call sent on demand with the\n' + \
-                   'ZVEI 1 / ZVEI 2 key actions (70 ms tones, repeat tone\n' + \
-                   '2600 Hz for ZVEI-1, 970 Hz for ZVEI-2)')
+        stype = int(_sc.type) if int(_sc.type) < len(SELCALL_TYPE_LIST) else 0
+        val = RadioSettingValueList(SELCALL_TYPE_LIST, None, stype)
+        rs = RadioSetting("selcall_type", "SelCall type (SelCal)", val)
+        rs.set_doc('SelCal: 5-tone selective call sent on demand with the\n' + \
+                   'SELCALL 1 / SELCALL 2 key actions.\n' + \
+                   '* ZVEI-1 / ZVEI-2: 70 ms tones, repeat 2600 / 970 Hz\n' + \
+                   '* CCIR-1 / CCIR-2: 100 / 70 ms tones, repeat 2110 Hz')
         mem.extra.append(rs)
 
-        for idx, raw in ((1, _zv.code1), (2, _zv.code2)):
-            val = RadioSettingValueString(0, 5, zvei_code_str(raw), False,
-                                          ZVEI_CODE_CHARS)
-            val.set_validate_callback(zvei_code_validate)
-            rs = RadioSetting("zvei_code%d" % idx,
-                              "ZVEI code %d (ZV CD%d)" % (idx, idx), val)
-            rs.set_doc('ZV CD%d: 5 digits (00000-99999), empty for none' % idx)
+        for idx, raw in ((1, _sc.code1), (2, _sc.code2)):
+            val = RadioSettingValueString(0, 5, selcall_code_str(raw), False,
+                                          SELCALL_CODE_CHARS)
+            val.set_validate_callback(selcall_code_validate)
+            rs = RadioSetting("selcall_code%d" % idx,
+                              "SelCall code %d (SC CD%d)" % (idx, idx), val)
+            rs.set_doc('SC CD%d: 5 digits (00000-99999), empty for none' % idx)
             mem.extra.append(rs)
 
     def set_settings(self, settings):
@@ -3380,7 +3381,7 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         # empty memory
         if memory.empty:
             _mem_chan.set_raw(b"\xFF" * 16)
-            self._memobj.zvei[number].set_raw(b"\xFF" * 8)   # as the firmware on delete
+            self._memobj.selcall[number].set_raw(b"\xFF" * 8)   # as the firmware on delete
 
             if number < MR_CHANNELS_MAX:
                 _mem_chname = self._memobj.channelname[number]
@@ -3465,14 +3466,14 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
             tmp_val = get_setting("scanlists", 0)
             _mem_attr.scanlist = tmp_val
 
-        # ZVEI (firmware with ENABLE_FEAT_ZVEI)
-        _zv = self._memobj.zvei[number]
-        _zv.type = get_setting("zvei_type", 0)
+        # SelCall (firmware with ENABLE_FEAT_SELCALL)
+        _sc = self._memobj.selcall[number]
+        _sc.type = get_setting("selcall_type", 0)
         for idx in (1, 2):
-            name = "zvei_code%d" % idx
+            name = "selcall_code%d" % idx
             code = str(memory.extra[name].value).strip() if name in memory.extra else ""
-            setattr(_zv, "code%d" % idx,
-                    int(code) if len(code) == 5 and code.isdigit() else ZVEI_CODE_NONE)
-        _zv.reserved = 0xFF
+            setattr(_sc, "code%d" % idx,
+                    int(code) if len(code) == 5 and code.isdigit() else SELCALL_CODE_NONE)
+        _sc.reserved = 0xFF
 
         return memory

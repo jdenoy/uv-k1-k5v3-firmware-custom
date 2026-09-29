@@ -36,8 +36,8 @@
     #include "app/fm.h"
 #endif
 #include "app/generic.h"
-#ifdef ENABLE_FEAT_ZVEI
-    #include "app/zvei.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
 #endif
 #include "app/main.h"
 #include "app/menu.h"
@@ -2685,12 +2685,12 @@ Skip:
         gFlagPrepareTX = false;
     }
 
-#ifdef ENABLE_FEAT_ZVEI
-    if (gZveiEndTx) {       // ZVEI burst sent: end the transmission like a PTT release
-        gZveiEndTx = false;
+#ifdef ENABLE_FEAT_SELCALL
+    if (gSelCallEndTx) {       // selcall burst sent: end the transmission like a PTT release
+        gSelCallEndTx = false;
         if (gCurrentFunction == FUNCTION_TRANSMIT)
             GENERIC_Key_PTT(false);
-        gZveiTx = false;
+        gSelCallTx = false;
     }
 #endif
 

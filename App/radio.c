@@ -14,8 +14,8 @@
  *     limitations under the License.
  */
 
-#ifdef ENABLE_FEAT_ZVEI
-    #include "app/zvei.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
 #endif
 #include "driver/bk4819-regs.h"
 #include <string.h>
@@ -1229,8 +1229,8 @@ void RADIO_PrepareTX(void)
         gTx1750Active = false;
 #endif
 
-#ifdef ENABLE_FEAT_ZVEI
-        ZVEI_Cancel();
+#ifdef ENABLE_FEAT_SELCALL
+        SELCALL_Cancel();
 #endif
 
 #ifdef ENABLE_DTMF_CALLING
@@ -1327,8 +1327,8 @@ void RADIO_SendEndOfTransmission(void)
         }
     #endif
 
-#ifdef ENABLE_FEAT_ZVEI
-    if (!gZveiTx)
+#ifdef ENABLE_FEAT_SELCALL
+    if (!gSelCallTx)
 #endif
         BK4819_PlayRoger(Bandwidth);
     DTMF_SendEndOfTransmission();
