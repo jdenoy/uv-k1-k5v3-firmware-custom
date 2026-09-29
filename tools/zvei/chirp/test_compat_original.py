@@ -1,5 +1,5 @@
 """Cross-compatibility: an image saved by the ZVEI driver opens with the original driver.
-Same setup as test_chirp_zvei.py. Run twice (two processes, CHIRP refuses two drivers with the same id):
+Same setup as test_chirp_zvei.py. Run twice, in two processes (each loads one driver):
     python test_compat_original.py <dir with chirp checkout> <zvei driver> <original driver> save
     python test_compat_original.py <dir with chirp checkout> <zvei driver> <original driver> load
 """

@@ -5,7 +5,7 @@ Setup (once):
     python3 -m venv /tmp/chirpvenv && /tmp/chirpvenv/bin/pip install lark pyserial requests yattag suds
 Run:
     /tmp/chirpvenv/bin/python tools/zvei/chirp/test_chirp_zvei.py /tmp/chirpsrc/.. \\
-        tools/zvei/chirp/f4hwn.chirp.v6.0.0-zvei.py path/to/original/f4hwn.chirp.v6.0.0.py
+        tools/zvei/chirp/f4hwn.chirp.v6.0.0-ZVEI1&2.py path/to/original/f4hwn.chirp.v6.0.0.py
 (the first argument is the directory that contains the `chirp` checkout)
 """
 import sys, types, importlib.util
@@ -128,8 +128,7 @@ drv._readmem = lambda sp, addr, n: b"\xFF" * n
 img = drv.do_download(r)
 check("download size", len(img) == 0xF080, hex(len(img)))
 
-# Cross-compatibility with the original driver needs a separate process (CHIRP
-# refuses two drivers with the same id): see test_compat_original.py.
+# Cross-compatibility with the original driver: see test_compat_original.py.
 
 print("PASSED" if not fails else "FAILED: %d" % fails)
 sys.exit(1 if fails else 0)

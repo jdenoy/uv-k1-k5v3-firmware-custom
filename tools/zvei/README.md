@@ -61,9 +61,10 @@ This is how the CHIRP driver below reads and writes it.
 
 ## CHIRP driver
 
-`tools/zvei/chirp/f4hwn.chirp.v6.0.0-zvei.py` is Armel's
+`tools/zvei/chirp/f4hwn.chirp.v6.0.0-ZVEI1&2.py` is Armel's
 `f4hwn.chirp.v6.0.0.py` (release v6.0.0) with ZVEI support. Load it in CHIRP with
-*File > Load Module*; it keeps the original's radio identity and replaces it.
+*File > Load Module*. It appears in CHIRP as **UV-K1 & UV-K5 V3 (F4HWN)
+ZVEI1&2**, next to the original: images saved with it carry that model name.
 
 - Each channel's **Extra** tab (memories and VFOs) shows **ZVEI type** (OFF /
   ZVEI-1 / ZVEI-2), **ZVEI code 1** and **ZVEI code 2** (5 digits, or empty for

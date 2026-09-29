@@ -1076,7 +1076,7 @@ def f4hwn_set_scn_to_storage(value):
 class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
     """Quansheng UV-K5 (egzumer + f4hwn)"""
     VENDOR = "Quansheng"
-    MODEL = "UV-K1 & UV-K5 V3 (F4HWN)"
+    MODEL = "UV-K1 & UV-K5 V3 (F4HWN) ZVEI1&2"
     BAUD_RATE = 38400
     NEEDS_COMPAT_SERIAL = False
     FIRMWARE_VERSION = ""
