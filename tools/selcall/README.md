@@ -128,7 +128,8 @@ set to the same tone (its squelch must open during the burst).
 **On-air result (2026-09-29, UV-K1, build SC1):** bursts sent from the radio and
 received with an RTL-SDR decode correctly in multimon-ng for ZVEI-1, ZVEI-2 and
 CCIR. multimon-ng does not tell CCIR-1 from CCIR-2 (same tones, only the
-duration differs: 100 ms vs 70 ms); the duration was not measured separately.
+duration differs: 100 ms vs 70 ms); the durations were then measured with
+`measure_tones.py` (see below): CCIR-1 100 ms, CCIR-2 70 ms.
 The channel's CTCSS is transmitted during the burst (checked with a second radio
 set to the same tone): selcall tones and CTCSS OK on TX.
 
@@ -163,6 +164,11 @@ discriminator unfiltered, so most of the power was reception noise above 3 kHz
 limited to 300-3000 Hz before analysis. Real burst from the UV-K1 (ZVEI code
 87654): 5 tones at 69-72 ms spacing, 2000/1830/1670/1530/1400 Hz, first tone
 about 300 ms after the carrier appears (the preload).
+
+**On-air duration and repeat-tone test (2026-09-29, UV-K1, build SC1), code
+`11223` with each type: all OK.** CCIR-1 measured at 100 ms per tone, CCIR-2 at
+70 ms, both with 2110 Hz repeats; ZVEI-1 and ZVEI-2 at 70 ms with 2600 Hz and
+970 Hz repeats respectively.
 
 ## Build identification
 
