@@ -125,6 +125,12 @@ On air: receive the burst with an RTL-SDR and decode it with
 `multimon-ng -a ZVEI1 -a ZVEI2 -a CCIR ...`; check the CTCSS with a second radio
 set to the same tone (its squelch must open during the burst).
 
+**On-air result (2026-09-29, UV-K1, build SC1):** bursts sent from the radio and
+received with an RTL-SDR decode correctly in multimon-ng for ZVEI-1, ZVEI-2 and
+CCIR. multimon-ng does not tell CCIR-1 from CCIR-2 (same tones, only the
+duration differs: 100 ms vs 70 ms); the duration was not measured separately.
+Still to check: the CTCSS during the burst.
+
 ## Build identification
 
 The Labs preset sets `BUILD_TAG`, appended to the version shown on the welcome
