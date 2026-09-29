@@ -132,6 +132,31 @@ duration differs: 100 ms vs 70 ms); the duration was not measured separately.
 The channel's CTCSS is transmitted during the burst (checked with a second radio
 set to the same tone): selcall tones and CTCSS OK on TX.
 
+## Measuring tone durations and repeat tones
+
+multimon-ng decodes the digits but does not measure time: it cannot tell
+CCIR-1 (100 ms) from CCIR-2 (70 ms). `tools/selcall/measure_tones.py` (numpy)
+reads the demodulated audio of a burst and lists each tone with its frequency,
+its meaning in each standard and the spacing to the next tone, which is the tone
+duration (no gap between selcall tones), then classifies the burst:
+
+```
+rtl_fm -f 433.650M -M fm -s 22050 - | tee burst.raw | multimon-ng -t raw -a CCIR -a ZVEI1 -a ZVEI2 -
+tools/selcall/measure_tones.py burst.raw --rate 22050     # or a WAV file
+```
+
+Use a code with a doubled digit (e.g. `11223`) to see the repeat tone: 2600 Hz
+for ZVEI-1, 970 Hz for ZVEI-2, 2110 Hz for CCIR. ZVEI-1 and ZVEI-2 have the same
+duration (70 ms); only the repeat tone differs. With multimon-ng alone, a ZVEI-2
+`11223` shows `1E2E3` with `-a ZVEI2` but `1C2C3` with `-a ZVEI1` (970 Hz is
+ZVEI-1's C tone).
+
+Checked on synthetic bursts (tones plus noise at 22.05 kHz): CCIR-1 12345 ->
+100 ms, CCIR-2 11223 -> 70 ms with 2110 Hz repeats, ZVEI-1 / ZVEI-2 11223 -> 70 ms
+with 2600 / 970 Hz repeats, each classified correctly. The detected length of a
+tone reads 5-7 ms short (transition blur of the 20 ms window); the spacing does
+not.
+
 ## Build identification
 
 The Labs preset sets `BUILD_TAG`, appended to the version shown on the welcome
