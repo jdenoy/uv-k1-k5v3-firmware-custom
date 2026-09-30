@@ -27,7 +27,8 @@
  *
  * Keys (UV-K5 and UV-K1): UP/DOWN browse the messages (newest first)
  *   1 bit rate 512/1200/2400 · 2 AC-coupling corner · 3 text AUTO/ALPHA/NUM
- *   4 beep on/off · 5 measure the noise floor again · MENU clear · EXIT quit.
+ *   4 beep on/off · 5 measure the noise floor again · MENU clear · EXIT quit
+ *   (EXIT is read between transmissions, not during one).
  * The speaker plays the transmissions: lower the volume. Settings are saved.
  * The loader re-runs RADIO_SetupRegisters on exit; the app restores the ADC,
  * PA4, the DAC and its clock itself.
@@ -85,7 +86,7 @@ enum { MODE_AUTO = 0, MODE_ALPHA, MODE_NUM, MODE_COUNT };
 
 static const app_api_t *A;
 static poc_t    d;
-static uint8_t  rate = POC_1200, corner = POC_C60, mode = MODE_AUTO, beepOn = 1;
+static uint8_t  rate = POC_1200, corner = POC_COFF, mode = MODE_AUTO, beepOn = 1;
 static uint8_t  view, prevKey;
 static uint16_t total;                 /* messages decoded since launch / clear */
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
@@ -166,7 +167,8 @@ static uint8_t capture(void){
         rssi=A->rssi_dbm();
         if(rssi < floorQ/64+REARM_DB){ if(++low>=4u) break; } else low=0;
         if(next>=CAP_MAX_CYC) break;
-        if(A->get_key()==APP_KEY_EXIT){ running=false; break; }
+        /* No get_key() here: its debounced scan takes 0.4 ms or more, i.e.
+         * 4+ sample periods, which smeared about one bit per codeword (v1.0). */
     }
     adcRestore();
     if(poc_flush(&d)) n++;

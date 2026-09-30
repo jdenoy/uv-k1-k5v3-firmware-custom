@@ -4,7 +4,7 @@
  *   host_pocsag 512|1200|2400 samples.u16 [corner]
  *
  * corner: AC coupling the decoder compensates, 0 30 60 100 150 250 (Hz,
- * default 60 as in the app).
+ * default 60, the reference for the tests; the app defaults to 0 since v1.1).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,10 +34,29 @@ int main(int argc, char **argv)
     if (!f) { perror(argv[2]); return 2; }
     static poc_t d;
     poc_init(&d, rate == 512 ? POC_512 : rate == 2400 ? POC_2400 : POC_1200, (uint8_t)corner);
+    /* POC_HOLES=N emulates a capture loop that stalls every 256 samples for N
+     * sample periods and then catches up: those N samples all read the value
+     * at the end of the stall. */
+    const char *hv = getenv("POC_HOLES");
+    int holes = hv ? atoi(hv) : 0;
     unsigned char b[2];
     int msgs = 0;
-    while (fread(b, 1, 2, f) == 2)
-        if (poc_push(&d, (uint16_t)(b[0] | (b[1] << 8)))) { show(poc_last(&d)); msgs++; }
+    long n = 0;
+    uint16_t buf[64];
+    while (fread(b, 1, 2, f) == 2) {
+        uint16_t s = (uint16_t)(b[0] | (b[1] << 8));
+        if (holes > 0 && n % 256 == 255) {         /* stall: buffer the next samples */
+            int k = 0;
+            buf[k++] = s;
+            while (k < holes && fread(b, 1, 2, f) == 2) buf[k++] = (uint16_t)(b[0] | (b[1] << 8));
+            for (int i = 0; i < k; i++)
+                if (poc_push(&d, buf[k - 1])) { show(poc_last(&d)); msgs++; }
+            n += k;
+            continue;
+        }
+        n++;
+        if (poc_push(&d, s)) { show(poc_last(&d)); msgs++; }
+    }
     if (poc_flush(&d)) { show(poc_last(&d)); msgs++; }
     fclose(f);
     printf("messages  : %d\nsyncs %u codewords %u fixed %u bad %u inverted %u\n",
