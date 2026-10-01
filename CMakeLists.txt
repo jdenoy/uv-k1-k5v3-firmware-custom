@@ -82,6 +82,13 @@ else()
     set(DISPLAY_VERSION_STRING_2 "${VERSION_STRING_2}")
 endif()
 
+# Optional build tag, shown on the welcome screen only (e.g. "v6.0.0 ZV1") to
+# identify a test build. Display only: VERSION_STRING_2 itself is compared with
+# the stored version at boot and a change resets locks and boot-message lines.
+if(BUILD_TAG)
+    set(DISPLAY_VERSION_STRING_2 "${DISPLAY_VERSION_STRING_2} ${BUILD_TAG}")
+endif()
+
 message("EXE_NAME = " ${EXE_NAME})
 message("Development build = " ${DEV})
 
