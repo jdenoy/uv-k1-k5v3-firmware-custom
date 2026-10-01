@@ -73,18 +73,23 @@ run "80 chars, K1-like, 1200 bps"  1200 corner=1000 "--msg=1234:3:A:this is a ve
 # preamble too and lost 512 bps pages on the K1.
 for r in 512 1200 2400; do
     python3 "$HERE/genpocsag.py" --rate "$r" --msg "1234:3:A:test" --hpf 1000 --cnr 20 --tx 4 --gap-ms 0 --out "$TMP/g.u16"
-    out="$(POC_GAP=600 "$TMP/host" "$r" "$TMP/g.u16" 1000)"
+    out="$(POC_GAP=600 "$TMP/host" "$r" "$TMP/g.u16" 2)"
     if grep -qF "messages  : 4" <<<"$out"; then echo "  ✅ UI pauses, 4 pages back to back, $r bps"; pass=$((pass + 1))
     else echo "  ❌ UI pauses, 4 pages back to back, $r bps"; echo "$out" | tail -2; fail=$((fail + 1)); fi
+done
+# Edge latch (each bit edge is a pulse; the K1 needs it at 512 bps) and auto.
+for r in 512 1200 2400; do
+run "edge latch, AC 1 kHz, CNR 15, $r bps" $r corner=1 "--msg=$A" --hpf 1000 --cnr 15 -- "${REF_A[@]}"
+run "auto, AC 1 kHz, CNR 12, $r bps"       $r corner=2 "--msg=$A" --hpf 1000 --cnr 12 -- "${REF_A[@]}"
 done
 run "combined worst case"        1200 "--msg=$A" --cnr 14 --foff 2000 --invert --clock-ppm 300 --hpf 100 --audio-lpf 3500 -- "${REF_A[@]}"
 for seed in 1 2 3 4; do
 run "CNR 11 dB, seed $seed"      1200 "--msg=$A" --cnr 11 --seed $seed --         "${REF_A[@]}"
 done
 
-# Real capture from the UV-K1 (POCSAG Rec v1.0, rpitx "1234:test" at 1200 bps,
-# 2026-10-01): must decode clean at the K1 corners.
-for c in 1000 1200 1500; do
+# Real captures from the UV-K1 (POCSAG Rec v1.0, rpitx "1234:test",
+# 2026-10-01). 1200 bps: must decode clean (it holds a sync).
+for c in 1000 1500 2; do      # 2 = auto (1000 Hz at 1200 bps)
     out="$("$TMP/host" 1200 "$HERE/k1/k1_1234_test_1200.u16" "$c")"
     if grep -qF "RIC 0001234 F3 bits 40" <<<"$out" && grep -qF "alpha: [test]" <<<"$out" \
        && grep -qF "fixed 0 bad 0" <<<"$out"; then
@@ -93,6 +98,13 @@ for c in 1000 1200 1500; do
         echo "  ❌ real K1 capture, corner $c"; echo "$out"; fail=$((fail + 1))
     fi
 done
+
+# 512 bps: the windows hold no sync word, so the decoder's bits are compared
+# with the bits rebuilt from the pulses (ground truth, checked against the
+# expected address and message words).
+out="$(python3 "$HERE/k1_bits512.py" "$HERE/.." 2>&1)"
+if grep -qF "OK" <<<"$out"; then echo "  ✅ real K1 512 bps captures, edge latch: $out"; pass=$((pass + 1))
+else echo "  ❌ real K1 512 bps captures: $out"; fail=$((fail + 1)); fi
 
 if command -v multimon-ng >/dev/null; then
     python3 "$HERE/genpocsag.py" --msg "$A" --msg "$N" --out "$TMP/s.u16" --wav22k "$TMP/s.raw"

@@ -27,7 +27,8 @@
  * beeps; the last 4 stay in memory.
  *
  * Keys (UV-K5 and UV-K1): UP/DOWN browse the messages (newest first)
- *   1 bit rate 512/1200/2400 · 2 AC-coupling corner · 3 text AUTO/ALPHA/NUM
+ *   1 bit rate 512/1200/2400 · 2 audio path (auto, edge latch, droop corner)
+ *   · 3 text AUTO/ALPHA/NUM
  *   4 beep on/off · MENU clear · EXIT quit (keys are read between
  *   transmissions, not during one).
  * The speaker plays the transmissions: lower the volume. Settings are saved.
@@ -77,14 +78,14 @@
 
 #define BEEP_HZ     1750
 #define BEEP_MS     80
-#define CFG_MAGIC   0xB6   /* v1.2: new corner table, old settings dropped */
+#define CFG_MAGIC   0xB7   /* v1.4: new audio-path table, old settings dropped */
 #define ROWS        5      /* text rows, 32 characters each               */
 
 enum { MODE_AUTO = 0, MODE_ALPHA, MODE_NUM, MODE_COUNT };
 
 static const app_api_t *A;
 static poc_t    d;
-static uint8_t  rate = POC_1200, corner = POC_C1000, mode = MODE_AUTO, beepOn = 1;
+static uint8_t  rate = POC_1200, corner = POC_CAUTO, mode = MODE_AUTO, beepOn = 1;
 static uint8_t  view, prevKey;
 static uint16_t total;                 /* messages decoded since launch / clear */
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
@@ -187,7 +188,7 @@ static bool looksAlpha(const poc_msg_t *m,char *txt){
 
 static void draw(void){
     static const char RATE[3][5]={"512","1200","2400"};
-    static const char CORNER[POC_NCORNER][5]={"off","60","250","1k","1k2","1k5"};
+    static const char CORNER[POC_NCORNER][5]={"off","60","250","1k","1k5","edg","aut"};
     static const char MODE[MODE_COUNT]={'?','A','N'};
     const poc_msg_t *m=poc_get(&d,view);
     char txt[POC_MAXBITS/4u+1u];      /* on the stack: the 4 KiB overlay is full */
