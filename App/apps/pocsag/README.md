@@ -9,8 +9,8 @@ Status:
 | Step | State |
 |---|---|
 | Decoder core (`pocsag.c`), host-tested | **Done**: 48/48 tests, including a real K1 capture |
-| Radio app (`pocsag_app.c`) | v1.2 (3,868 B) built, to be tested on the K1 |
-| Bench test on the K1 | rpitx `pocsag -f 439987500 -r 1200`; a real capture decodes clean on the host |
+| Radio app (`pocsag_app.c`) | **v1.2 decodes on the K1** (2026-10-01): `1234 F3 A`, `test`, all 4 rpitx repeats (`1/4`) |
+| Bench test on the K1 | 1200 bps done; 512 / 2400 bps, weak signal, long messages to do |
 
 ### What the bench found (2026-09-29 to 10-01)
 
@@ -136,14 +136,14 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
   and 1500 Hz;
 - the generator itself cross-checked with multimon-ng (same messages decoded).
 
-## Bench test (next)
+## Bench test
 
-1. Flash v1.2, set the VFO to 439.9875 MHz (FM wide), launch POCSAG, send
-   `echo "1234:test" | sudo ./pocsag -f 439987500 -r 1200`: expect `1234 F3 A`,
-   `test`, and a beep.
-2. If not, try the corners 1200 and 1500 Hz (key 2), and record with POCSAG Rec
-   (`../pocrec`, key 5 while the page plays) for analysis.
-3. Then 512 and 2400 bps, a weak signal, and a long run of pages.
+1. **Done (2026-10-01)**: v1.2, VFO 439.9875 MHz FM wide, corner 1000 Hz,
+   `echo "1234:test" | sudo ./pocsag -f 439987500 -r 1200` shows `1234 F3 A  1/4`
+   and `test`: the four repeats rpitx sends were all decoded.
+2. Next: 512 and 2400 bps (key 1 and `-r`), a long alphanumeric message, a
+   numeric one (`-n`), a weak signal (distance, attenuator), a long run of pages.
+   If one fails, record it with POCSAG Rec (`../pocrec`, key 5 while it plays).
 
 ## Version
 
