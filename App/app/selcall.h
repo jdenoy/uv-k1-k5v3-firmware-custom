@@ -71,10 +71,14 @@ enum {
 #define SELCALL_EEPROM_BASE   0xD000u     /* logical window 0xD000-0xF06F          */
 #define SELCALL_EEPROM_END    (SELCALL_EEPROM_BASE + SELCALL_RECORDS * SELCALL_REC_SIZE)
 
-typedef struct {
-    uint8_t  type;                        /* SELCALL_OFF .. SELCALL_CCIR2          */
-    uint32_t code[2];                     /* 0..99999, or SELCALL_CODE_NONE        */
-} SelCall_Channel_t;
+/* Fields of a channel's selcall setting, in the order of the menus
+ * MENU_SELCALL, MENU_SC_CD1, MENU_SC_CD2 (field = menu id - MENU_SELCALL). */
+enum {
+    SELCALL_F_TYPE = 0,                   /* SELCALL_OFF .. SELCALL_CCIR2          */
+    SELCALL_F_CODE1,                      /* 0..99999, or SELCALL_CODE_NONE        */
+    SELCALL_F_CODE2,
+    SELCALL_FIELDS
+};
 
 /* Menu / display names of the types ("OFF", "ZVEI-1", ...). */
 extern const char *const gSelCallTypeNames[SELCALL_TYPE_COUNT];
@@ -86,9 +90,10 @@ uint8_t  SELCALL_BuildTones(uint8_t type, uint32_t code, uint16_t *freqs);
 uint16_t SELCALL_ToneMs(uint8_t type);
 
 #ifdef ENABLE_FEAT_SELCALL
-/* Per-channel storage (channel = CHANNEL_SAVE, vfo = 0/1 for VFO records). */
-void SELCALL_Load(uint16_t channel, uint8_t vfo, SelCall_Channel_t *out);
-void SELCALL_Save(uint16_t channel, uint8_t vfo, const SelCall_Channel_t *in);
+/* Per-channel storage. Get/Set act on the current TX channel (menus);
+ * channel = CHANNEL_SAVE, records of VFO channels are per VFO (TX_VFO). */
+int32_t SELCALL_GetField(uint8_t field);
+void SELCALL_SetField(uint8_t field, int32_t value);
 void SELCALL_Clear(uint16_t channel);
 void SELCALL_Copy(uint16_t fromChannel, uint8_t fromVfo, uint16_t toChannel);
 void SELCALL_EraseAll(void);
@@ -96,9 +101,10 @@ void SELCALL_EraseAll(void);
 /* On-demand transmission. */
 extern bool gSelCallTx;                   /* a selcall burst is on air             */
 extern bool gSelCallEndTx;                /* burst sent: main loop must unkey      */
+extern uint8_t gSelCallPending;           /* tones of the requested burst, 0 = none */
 bool SELCALL_Request(uint8_t which);      /* which = 0 (code 1) or 1 (code 2)      */
-bool SELCALL_Pending(void);
-void SELCALL_Cancel(void);                /* TX refused: drop the pending burst    */
+static inline bool SELCALL_Pending(void) { return gSelCallPending != 0; }
+static inline void SELCALL_Cancel(void)  { gSelCallPending = 0; }   /* TX refused: drop the burst */
 void SELCALL_Transmit(void);              /* from FUNCTION_Transmit, blocking      */
 #endif
 

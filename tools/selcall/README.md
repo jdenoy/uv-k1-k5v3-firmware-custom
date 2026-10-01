@@ -173,9 +173,40 @@ about 300 ms after the carrier appears (the preload).
 ## Build identification
 
 The Labs preset sets `BUILD_TAG`, appended to the version shown on the welcome
-screen: `ZV1` first ZVEI build, `ZV2` CHIRP window, `SC1` SelCall (ZVEI + CCIR).
+screen: `ZV1` first ZVEI build, `ZV2` CHIRP window, `SC1` SelCall (ZVEI + CCIR),
+`SC2` SelCall on Armel's `feature_update_v6` (v6.1.0, branch `feature/selcall-v6`).
 It is display only: `VERSION_STRING_2` is compared with the stored version at
 boot, and changing it resets the key/menu locks, `SET_KEY`, display inversion and
 the boot-message lines.
 
 Flash cost (Labs): +1,680 bytes (113,616 of 120,832, build SC1).
+
+## Port to feature_update_v6 (v6.1.0, build SC2)
+
+Branch `feature/selcall-v6` = Armel's `feature_update_v6` + SelCall (net diff of
+`feature/selcall`, one commit). Upstream had reworked the menus: the SelCall
+cases sit next to `MENU_PTT_ID`, and `SELCALL 1` / `SELCALL 2` are entries of the
+`SIDEFUNCTION_NAMES` X-macro (IDs 24/25 unchanged, so saved key settings stay
+valid; availability through `ACTION_IsAvailable` / `action_opt_table`). The
+selcall area (0xB000-0xDFFF per bank) and the EEPROM window (0xD000-0xF06F) are
+still unused upstream (settings now end at 0xA178), and the new raw
+dump/restore and cable AirCopy copy the whole bank, records included.
+
+Then 128 bytes trimmed from the SelCall code only, same behaviour and record
+format: flash cost +1,612 -> **+1,484 bytes** (Labs 116,220 of 120,832, RAM +32 B).
+
+- Records handled raw (8 bytes): `SELCALL_Clear` writes an erased record,
+  `SELCALL_Copy` copies the 8 bytes, a missing record (NOAA) reads as erased flash,
+  so decoding has one path.
+- The three menus are consecutive and map to fields (type, code 1, code 2):
+  `SELCALL_GetField` / `SELCALL_SetField` replace the load / modify / save done
+  in two places of `app/menu.c`; the type is shown with upstream's
+  `choiceTable` pattern.
+- `SELCALL_Pending` / `SELCALL_Cancel` are inline over `gSelCallPending`.
+- The standards table has no entry for OFF and no digit-table pointer (the type
+  gives ZVEI or CCIR).
+- Tried and dropped (larger): a shared non-inlined `RecordIndex`.
+
+To do: the CHIRP driver here derives from the v6.0.0 driver; v6.1.0 extends the
+settings (mixed scan lists, 0xA170-0xA178), so it has to be rebased on Armel's
+v6.1.0 driver before use with this firmware.

@@ -819,17 +819,9 @@ void MENU_AcceptSetting(void)
 #ifdef ENABLE_FEAT_SELCALL
         case MENU_SELCALL:
         case MENU_SC_CD1:
-        case MENU_SC_CD2:
-        {   // stored in the channel's selcall record, not in the channel itself
-            SelCall_Channel_t z;
-            SELCALL_Load(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, &z);
-            if (UI_MENU_GetCurrentMenuId() == MENU_SELCALL)
-                z.type = (uint8_t)gSubMenuSelection;
-            else
-                z.code[UI_MENU_GetCurrentMenuId() == MENU_SC_CD2] = (uint32_t)gSubMenuSelection;
-            SELCALL_Save(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, &z);
+        case MENU_SC_CD2:      // stored in the channel's selcall record, not in the channel
+            SELCALL_SetField((uint8_t)(UI_MENU_GetCurrentMenuId() - MENU_SELCALL), gSubMenuSelection);
             return;
-        }
 #endif
 
 #ifdef ENABLE_DTMF_CALLING
@@ -1258,13 +1250,8 @@ void MENU_ShowCurrentSetting(void)
         case MENU_SELCALL:
         case MENU_SC_CD1:
         case MENU_SC_CD2:
-        {
-            SelCall_Channel_t z;
-            SELCALL_Load(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, &z);
-            gSubMenuSelection = UI_MENU_GetCurrentMenuId() == MENU_SELCALL ? z.type
-                              : (int32_t)z.code[UI_MENU_GetCurrentMenuId() == MENU_SC_CD2];
+            gSubMenuSelection = SELCALL_GetField((uint8_t)(UI_MENU_GetCurrentMenuId() - MENU_SELCALL));
             break;
-        }
 #endif
 
 #ifdef ENABLE_DTMF_CALLING
@@ -1600,8 +1587,8 @@ static void MENU_Key_0_to_9(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     }
 
 #ifdef ENABLE_FEAT_SELCALL
-    if (UI_MENU_GetCurrentMenuId() == MENU_SC_CD1 || UI_MENU_GetCurrentMenuId() == MENU_SC_CD2)
-    {   // 5 digits, leading zeros kept (00000..99999)
+    if ((uint8_t)(UI_MENU_GetCurrentMenuId() - MENU_SC_CD1) <= MENU_SC_CD2 - MENU_SC_CD1)
+    {   // code 1 or 2: 5 digits, leading zeros kept (00000..99999)
         if (gInputBoxIndex < SELCALL_DIGITS)
         {
             gRequestDisplayScreen = DISPLAY_MENU;

@@ -26,6 +26,7 @@
 #include "misc.h"
 #include "radio.h"
 #include "settings.h"
+#include <string.h>
 
 /* Free physical area of each config bank: the bank uses 0x0000-0x886E,
  * 0x9000-0x90E8 and 0xA000-0xA170 (see driver/eeprom_compat.c); CHIRP writes
@@ -37,9 +38,9 @@
 
 bool gSelCallTx;
 bool gSelCallEndTx;
+uint8_t gSelCallPending;
 
 static uint16_t sPendingTones[SELCALL_DIGITS];
-static uint8_t  sPendingCount;
 static uint16_t sPendingToneMs;
 
 static uint16_t RecordIndex(uint16_t channel, uint8_t vfo)
@@ -51,67 +52,71 @@ static uint16_t RecordIndex(uint16_t channel, uint8_t vfo)
     return SELCALL_NO_INDEX;               /* NOAA: no transmit anyway */
 }
 
-static uint32_t GetCode(const uint8_t *p)
+/* Raw 8-byte record. No record (NOAA) reads as erased flash: type off, no code. */
+static void ReadRecord(uint16_t channel, uint8_t vfo, uint8_t *rec)
 {
+    const uint16_t idx = RecordIndex(channel, vfo);
+    if (idx == SELCALL_NO_INDEX)
+        memset(rec, 0xFF, SELCALL_REC_SIZE);
+    else
+        PY25Q16_ReadBuffer(SELCALL_BASE + (uint32_t)idx * SELCALL_REC_SIZE, rec, SELCALL_REC_SIZE);
+}
+
+static void WriteRecord(uint16_t channel, uint8_t vfo, const uint8_t *rec)
+{
+    const uint16_t idx = RecordIndex(channel, vfo);
+    if (idx != SELCALL_NO_INDEX)
+        PY25Q16_WriteBuffer(SELCALL_BASE + (uint32_t)idx * SELCALL_REC_SIZE, rec, SELCALL_REC_SIZE, false);
+}
+
+/* Field value from a record: type (invalid -> off) or 24-bit LE code
+ * (above 99999, erased included -> no code). */
+static uint32_t GetField(const uint8_t *rec, uint8_t field)
+{
+    if (field == SELCALL_F_TYPE)
+        return rec[0] < SELCALL_TYPE_COUNT ? rec[0] : SELCALL_OFF;
+    const uint8_t *p = &rec[field * 3u - 2u];     /* code 1 at [1..3], code 2 at [4..6] */
     const uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
     return v <= SELCALL_CODE_MAX ? v : SELCALL_CODE_NONE;
 }
 
-static void PutCode(uint8_t *p, uint32_t v)
-{
-    if (v > SELCALL_CODE_MAX)
-        v = 0xFFFFFFu;                  /* erased pattern = no code */
-    p[0] = (uint8_t)v;
-    p[1] = (uint8_t)(v >> 8);
-    p[2] = (uint8_t)(v >> 16);
-}
-
-void SELCALL_Load(uint16_t channel, uint8_t vfo, SelCall_Channel_t *out)
+int32_t SELCALL_GetField(uint8_t field)
 {
     uint8_t rec[SELCALL_REC_SIZE];
-    const uint16_t idx = RecordIndex(channel, vfo);
-
-    out->type    = SELCALL_OFF;
-    out->code[0] = SELCALL_CODE_NONE;
-    out->code[1] = SELCALL_CODE_NONE;
-    if (idx == SELCALL_NO_INDEX)
-        return;
-
-    PY25Q16_ReadBuffer(SELCALL_BASE + (uint32_t)idx * SELCALL_REC_SIZE, rec, sizeof(rec));
-    out->type    = rec[0] < SELCALL_TYPE_COUNT ? rec[0] : SELCALL_OFF;
-    out->code[0] = GetCode(&rec[1]);
-    out->code[1] = GetCode(&rec[4]);
+    ReadRecord(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, rec);
+    return (int32_t)GetField(rec, field);
 }
 
-static void SaveIndex(uint16_t idx, const SelCall_Channel_t *in)
+void SELCALL_SetField(uint8_t field, int32_t value)
 {
     uint8_t rec[SELCALL_REC_SIZE];
-
-    rec[0] = in->type < SELCALL_TYPE_COUNT ? in->type : SELCALL_OFF;
-    PutCode(&rec[1], in->code[0]);
-    PutCode(&rec[4], in->code[1]);
-    rec[7] = 0xFF;
-    PY25Q16_WriteBuffer(SELCALL_BASE + (uint32_t)idx * SELCALL_REC_SIZE, rec, sizeof(rec), false);
-}
-
-void SELCALL_Save(uint16_t channel, uint8_t vfo, const SelCall_Channel_t *in)
-{
-    const uint16_t idx = RecordIndex(channel, vfo);
-    if (idx != SELCALL_NO_INDEX)
-        SaveIndex(idx, in);
+    uint32_t v = (uint32_t)value;
+    ReadRecord(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, rec);
+    if (field == SELCALL_F_TYPE) {
+        rec[0] = v < SELCALL_TYPE_COUNT ? (uint8_t)v : SELCALL_OFF;
+    } else {
+        uint8_t *p = &rec[field * 3u - 2u];
+        if (v > SELCALL_CODE_MAX)
+            v = 0xFFFFFFu;                       /* erased pattern = no code */
+        p[0] = (uint8_t)v;
+        p[1] = (uint8_t)(v >> 8);
+        p[2] = (uint8_t)(v >> 16);
+    }
+    WriteRecord(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, rec);
 }
 
 void SELCALL_Clear(uint16_t channel)
 {
-    const SelCall_Channel_t none = { SELCALL_OFF, { SELCALL_CODE_NONE, SELCALL_CODE_NONE } };
-    SELCALL_Save(channel, 0, &none);
+    uint8_t rec[SELCALL_REC_SIZE];
+    memset(rec, 0xFF, sizeof(rec));               /* erased: type off, no code */
+    WriteRecord(channel, 0, rec);
 }
 
 void SELCALL_Copy(uint16_t fromChannel, uint8_t fromVfo, uint16_t toChannel)
 {
-    SelCall_Channel_t c;
-    SELCALL_Load(fromChannel, fromVfo, &c);
-    SELCALL_Save(toChannel, 0, &c);
+    uint8_t rec[SELCALL_REC_SIZE];
+    ReadRecord(fromChannel, fromVfo, rec);
+    WriteRecord(toChannel, 0, rec);
 }
 
 void SELCALL_EraseAll(void)
@@ -122,42 +127,30 @@ void SELCALL_EraseAll(void)
 
 bool SELCALL_Request(uint8_t which)
 {
-    SelCall_Channel_t c;
-
-    SELCALL_Load(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, &c);
-    sPendingCount  = SELCALL_BuildTones(c.type, c.code[which & 1u], sPendingTones);
-    sPendingToneMs = SELCALL_ToneMs(c.type);
-    return sPendingCount != 0;
-}
-
-bool SELCALL_Pending(void)
-{
-    return sPendingCount != 0;
-}
-
-void SELCALL_Cancel(void)
-{
-    sPendingCount = 0;
+    const uint8_t type = (uint8_t)SELCALL_GetField(SELCALL_F_TYPE);
+    const uint32_t code = (uint32_t)SELCALL_GetField((uint8_t)(SELCALL_F_CODE1 + (which & 1u)));
+    gSelCallPending  = SELCALL_BuildTones(type, code, sPendingTones);
+    sPendingToneMs = SELCALL_ToneMs(type);
+    return gSelCallPending != 0;
 }
 
 void SELCALL_Transmit(void)
 {
-    const uint8_t count = sPendingCount;
+    const uint8_t count = gSelCallPending;
 
-    sPendingCount = 0;
+    gSelCallPending = 0;
     gSelCallTx = true;
 
     /* Carrier and the channel's CTCSS/DCS are already on (RADIO_SetTxParameters):
      * mute the microphone path, let the repeater open, then send the tones. */
     BK4819_EnterTxMute();
 
-    if (gEeprom.DTMF_SIDE_TONE) {
+    const bool sideTone = gEeprom.DTMF_SIDE_TONE;
+    if (sideTone) {
         AUDIO_AudioPathOn();
         gEnableSpeaker = true;
-        BK4819_SetAF(BK4819_AF_BEEP);
-    } else {
-        BK4819_SetAF(BK4819_AF_MUTE);
     }
+    BK4819_SetAF(sideTone ? BK4819_AF_BEEP : BK4819_AF_MUTE);
 
     BK4819_WriteRegister(BK4819_REG_70,
         BK4819_REG_70_ENABLE_TONE1 | (SELCALL_TONE_GAIN << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN));
@@ -168,7 +161,7 @@ void SELCALL_Transmit(void)
     for (uint8_t i = 0; i < count; i++)
         BK4819_PlayToneRaw(sPendingTones[i], sPendingToneMs);    /* unmute, tone, mute */
 
-    if (gEeprom.DTMF_SIDE_TONE) {
+    if (sideTone) {
         AUDIO_AudioPathOff();
         gEnableSpeaker = false;
     }
