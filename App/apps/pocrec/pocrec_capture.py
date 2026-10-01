@@ -29,7 +29,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEC = os.path.join(HERE, "..", "pocsag")
-CORNERS = (0, 30, 60, 100, 150, 250)
+CORNERS = (0, 60, 250, 1000, 1200, 1500)
 
 
 def open_port(path):
@@ -168,6 +168,7 @@ def main():
     ap.add_argument("--rate", type=int, default=1200, choices=(512, 1200, 2400))
     ap.add_argument("--count", type=int, default=0, help="stop after N recordings (0 = until Ctrl-C)")
     ap.add_argument("--analyse")
+    ap.add_argument("--debug", action="store_true", help="print every received line (first 60 chars)")
     a = ap.parse_args()
     if a.analyse:
         h, digits = load(a.analyse)
@@ -187,6 +188,8 @@ def main():
     n, header, digits = 0, None, ""
     try:
         for ln in lines(fd):
+            if a.debug:
+                print(f"[rx] {ln[:60]!r}", flush=True)
             if ln.startswith("POCREC"):
                 header, digits = ln, ""
             elif header and ln.endswith("END"):

@@ -8,23 +8,33 @@ Status:
 
 | Step | State |
 |---|---|
-| Decoder core (`pocsag.c`), host-tested on synthetic audio | **Done**: 39/39 tests pass |
-| Radio app (`pocsag_app.c`: trigger, sampling, display, beep) | v1.0 run on the K1: garbage text. v1.1 (3,920 B) fixes the capture loop, to be tested |
-| Bench test on the K1 | In progress: rpitx `pocsag -f 439987500 -r 1200`, recordings with POCSAG Rec (`../pocrec`) |
+| Decoder core (`pocsag.c`), host-tested | **Done**: 48/48 tests, including a real K1 capture |
+| Radio app (`pocsag_app.c`) | v1.2 (3,868 B) built, to be tested on the K1 |
+| Bench test on the K1 | rpitx `pocsag -f 439987500 -r 1200`; a real capture decodes clean on the host |
 
-v1.0 on the radio (2026-09-29): only the `off` corner gave anything, and the
-text was garbage. Two findings:
+### What the bench found (2026-09-29 to 10-01)
 
-- The capture loop read the keyboard every 256 samples. The debounced scan takes
-  0.4 ms or more (5 columns x 8 reads x 10 us), 4+ sample periods; the late
-  samples were then read back to back, which smears about one bit per codeword
-  (host emulation, `POC_HOLES=8`: 13 of 16 codewords needed a correction on a
-  clean signal, so any noise made them uncorrectable). v1.1 no longer reads keys
-  during a transmission (EXIT works between transmissions).
-- A DC-coupled signal decodes with corners off and 30 Hz only (60 Hz and up
-  fail), which matches what the radio showed: the K1 path looks close to
-  DC-coupled. v1.1 defaults to `off`. A setting saved by v1.0 is kept: press 2
-  until `AC off` if needed.
+v1.0 and v1.1 showed garbage on the K1. Recording the audio with POCSAG Rec
+(`../pocrec`) and decoding it on the Mac found four problems, all fixed in
+v1.2:
+
+1. **The K1 audio path at PA4 is close to a differentiator**: a high-pass around
+   1-1.5 kHz. Inside a run of equal bits the level falls back to the centre in
+   about 0.3 ms, so each bit edge comes out as a pulse. The droop compensation
+   (key 2) now offers 1000 / 1200 / 1500 Hz and defaults to 1000 Hz: on the real
+   capture 1000 to 1500 Hz decode clean, 800 Hz does not; on synthetic 1 kHz
+   coupling at CNR 12 dB, 1000 Hz decodes 8/8 seeds, 1200 Hz 7/8.
+2. **Bit clock dragged by ripple**: the audio also carries strong 1-3 kHz
+   content, whose zero crossings inside a run of equal bits pulled the DPLL a
+   whole bit off. The clock now only moves on real transitions (the two bits
+   around the boundary differ), using the crossing nearest the boundary, and the
+   correction is applied at mid-slot.
+3. **RSSI trigger firing on noise**: idle RSSI sat at -81 dBm, 11 dB above the
+   -92 dBm floor measured at launch, so the app kept sampling noise. v1.2 has no
+   trigger: it decodes continuously and the sync word is the detector (10
+   minutes of band-limited noise gave no false sync on the host).
+4. **Keyboard scan in the capture loop** (fixed in v1.1): 0.4 ms+ per scan
+   smeared about one bit per codeword.
 
 Receiving is legal; what you do with the content is not always. Pager traffic
 that is not addressed to you or meant for the public (fire brigades, hospitals,
@@ -36,21 +46,21 @@ do not record, publish or act on it. Use the app on amateur paging (DAPNET,
 
 1. Set the VFO to the paging frequency, **FM, wide bandwidth** (POCSAG uses
    +/-4.5 kHz deviation), e.g. 439.9875 MHz for DAPNET.
-2. Launch **POCSAG** with no transmission in progress: the noise floor is
-   measured at launch (key 5 measures it again).
+2. Launch **POCSAG**.
 3. Lower the volume: the RX audio must stay on (it is what reaches PA4), so the
    speaker plays each transmission.
 
-A transmission is detected on RSSI (10 dB above the floor) and sampled until the
-carrier drops (RSSI back below floor + 5 dB for about 100 ms), for at most 10 s
-at a time on a continuous carrier. Keys are not read during a transmission. The screen is updated and the beeps played
-(one per decoded message, 3 at most) when the sampling stops.
+The app samples continuously (no squelch, no RSSI trigger). About every 100 ms,
+while no transmission is being decoded, it reads the keys and updates the
+screen; during a transmission it does not, so keys answer once the page is
+over (at most 10 s on a continuous transmission). The beeps (one per decoded
+message, 3 at most) play when the transmission ends.
 
 | Screen | Content |
 |---|---|
 | Line 0 | RIC, function (`F0`-`F3`), text type (`A` alphanumeric, `N` numeric, `T` tone only), message number / messages kept |
 | Rows below | The text, 32 characters per row, 5 rows |
-| Bottom row | Bit rate, AC-coupling corner (`AC60`), text mode (`?` auto, `A`, `N`), RSSI / floor, messages decoded (`#`), `fix` (a bit was corrected) or `BAD` (a codeword could not be corrected), `mute` |
+| Bottom row | Bit rate, AC-coupling corner (`AC1k`), text mode (`?` auto, `A`, `N`), RSSI, messages decoded (`#`), `fix` (a bit was corrected) or `BAD` (a codeword could not be corrected), `mute` |
 
 Keys (UV-K5 and UV-K1):
 
@@ -58,14 +68,14 @@ Keys (UV-K5 and UV-K1):
 |---|---|
 | UP / DOWN | Browse the last 4 messages (newest first; direction follows the firmware's navigation setting) |
 | 1 | Bit rate 512 / 1200 / 2400 |
-| 2 | AC-coupling corner the decoder compensates: off / 30 / 60 / 100 / 150 / 250 Hz |
+| 2 | AC-coupling corner the decoder compensates: off / 60 / 250 / 1000 / 1200 / 1500 Hz (`AC1k` default; the K1 needs 1000-1500) |
 | 3 | Text: auto / alphanumeric / numeric |
 | 4 | Beep on / off |
-| 5 | Measure the noise floor again |
 | MENU | Clear the messages and the counter |
-| EXIT | Quit (also during a transmission) |
+| EXIT | Quit (read between transmissions) |
 
 Bit rate, corner, text mode and beep are saved (committed when the app exits).
+v1.2 changed the corner table, so settings saved by v1.0/v1.1 are ignored.
 Auto text mode shows a message as alphanumeric unless more than a quarter of its
 characters are not printable, then as numeric.
 
@@ -79,16 +89,15 @@ channel 4 at 9.6 kHz timed from SysTick.
 POCSAG is NRZ 2-FSK, so the discriminator output is the bit stream itself. The
 decoder (`pocsag.c`, freestanding, no division):
 
-1. **Droop compensation.** The audio reaches PA4 through AC coupling, which
-   makes a run of equal bits sag towards the centre (at 512 bps with a 30 Hz
-   corner, a 5-bit run loses most of its level). Quantized feedback rebuilds what
-   the high-pass removed, a low-pass of the decided levels, and adds it back.
-   Its corner is key 2 (default `off` since v1.1). On synthetic audio a 60 Hz
-   setting decodes coupling from 30 to 150 Hz at every bit rate; 250 Hz coupling needs the 250
-   setting; a DC-coupled chain needs `off`. The real K1 corner is not known yet.
-2. **Bit clock.** Each bit is integrated over its slot; a DPLL on the zero
-   crossings moves 1/8 of the phase error per crossing, rounded towards zero (a
-   floored -1 once pushed the phase across the boundary and dropped a bit).
+1. **Droop compensation.** The audio reaches PA4 through a high-pass (about
+   1-1.5 kHz on the K1, see above), which makes a run of equal bits fall back
+   to the centre. Quantized feedback rebuilds what the high-pass removed, a
+   low-pass of the decided levels, and adds it back. Its corner is key 2.
+2. **Bit clock.** Each bit is integrated over its slot. A DPLL keeps the slot
+   boundaries on the transitions: the zero crossing nearest each boundary is
+   kept, and the clock moves by 1/4 of its error only when the bits on both
+   sides differ; the correction is applied at mid-slot so it never crosses a
+   boundary.
 3. **Framing.** The sync codeword `0x7CD215D8` is searched in both polarities
    (2 bit errors accepted, 3 on the following batches), then 16 codewords per
    batch.
@@ -102,7 +111,7 @@ decoder (`pocsag.c`, freestanding, no division):
    displayed. An idle codeword, the next address, a lost sync or the end of the
    carrier closes a message.
 
-Space: the app uses 3,920 of the 4,096 bytes (v1.1). The text buffer (141 B)
+Space: the app uses 3,868 of the 4,096 bytes (v1.2). The text buffer (141 B)
 lives on the stack in `draw()`, the waiting screen does not show the frequency,
 and tone-only messages are marked `T` in the header instead of a text line.
 
@@ -120,20 +129,24 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
   3 messages in one batch, truncation of a long message;
 - no coupling with the corner off, 250 Hz coupling with the 250 setting at CNR
   12 dB (three bit rates), a combined worst case, CNR 11 dB over 4 noise seeds;
+- K1-like coupling (1 and 1.5 kHz high-pass) with the 1000 Hz corner, three
+  bit rates;
+- a real capture from the K1 (`test/k1/`, POCSAG Rec v1.0, rpitx `1234:test`
+  at 1200 bps): RIC 1234, F3, `test`, no bit corrected, at corners 1000, 1200
+  and 1500 Hz;
 - the generator itself cross-checked with multimon-ng (same messages decoded).
 
-## Bench test (to do)
+## Bench test (next)
 
-1. Transmit test pages on 433.650 MHz with the rpitx generator (rpitx ships a
-   `pocsag` tool) at 1200 bps, then 512 and 2400; check the message and the beep.
-2. If messages come out `BAD` or not at all, try the corners (key 2): the one
-   that decodes best tells us the real AC coupling of the K1 audio path. Then
-   make it the default.
-3. Check the RSSI trigger with a weak signal, and a long run of pages on a
-   continuous carrier (10 s capture windows).
+1. Flash v1.2, set the VFO to 439.9875 MHz (FM wide), launch POCSAG, send
+   `echo "1234:test" | sudo ./pocsag -f 439987500 -r 1200`: expect `1234 F3 A`,
+   `test`, and a beep.
+2. If not, try the corners 1200 and 1500 Hz (key 2), and record with POCSAG Rec
+   (`../pocrec`, key 5 while the page plays) for analysis.
+3. Then 512 and 2400 bps, a weak signal, and a long run of pages.
 
 ## Version
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.0`).
-Current: **v1.1**.
+Current: **v1.2**.

@@ -60,9 +60,27 @@ run "no AC coupling, corner off" 1200 corner=0 "--msg=$A" --hpf 0 --            
 for r in 512 1200 2400; do
 run "AC 250 Hz, corner 250 $r bps" $r corner=250 "--msg=$A" --hpf 250 --cnr 12 -- "${REF_A[@]}"
 done
+# The K1 audio path is close to a differentiator (about 1 kHz high-pass, measured
+# on a real recording): the app default corner is 1000 Hz.
+for r in 512 1200 2400; do
+run "K1-like: AC 1 kHz, corner 1000 $r bps" $r corner=1000 "--msg=$A" --hpf 1000 --cnr 12 -- "${REF_A[@]}"
+run "K1-like: AC 1.5 kHz, corner 1000 $r bps" $r corner=1000 "--msg=$A" --hpf 1500 --cnr 15 -- "${REF_A[@]}"
+done
 run "combined worst case"        1200 "--msg=$A" --cnr 14 --foff 2000 --invert --clock-ppm 300 --hpf 100 --audio-lpf 3500 -- "${REF_A[@]}"
 for seed in 1 2 3 4; do
 run "CNR 11 dB, seed $seed"      1200 "--msg=$A" --cnr 11 --seed $seed --         "${REF_A[@]}"
+done
+
+# Real capture from the UV-K1 (POCSAG Rec v1.0, rpitx "1234:test" at 1200 bps,
+# 2026-10-01): must decode clean at the K1 corners.
+for c in 1000 1200 1500; do
+    out="$("$TMP/host" 1200 "$HERE/k1/k1_1234_test_1200.u16" "$c")"
+    if grep -qF "RIC 0001234 F3 bits 40" <<<"$out" && grep -qF "alpha: [test]" <<<"$out" \
+       && grep -qF "fixed 0 bad 0" <<<"$out"; then
+        echo "  ✅ real K1 capture, corner $c"; pass=$((pass + 1))
+    else
+        echo "  ❌ real K1 capture, corner $c"; echo "$out"; fail=$((fail + 1))
+    fi
 done
 
 if command -v multimon-ng >/dev/null; then

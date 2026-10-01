@@ -22,13 +22,14 @@
  * LPF3K / de-emphasis and AFC off), the RX audio reaches PA4 (the voice DAC
  * pin, unused while voice is disabled), held at mid-scale by the MCU DAC
  * (unbuffered) and sampled on ADC channel 4 at 9.6 kHz, timed from SysTick,
- * while RSSI shows a carrier. Samples go straight into the pocsag decoder
- * (see README.md). Every decoded message beeps; the last 4 stay in memory.
+ * continuously (no squelch: the sync word is the detector). Samples go
+ * straight into the pocsag decoder (see README.md). Every decoded message
+ * beeps; the last 4 stay in memory.
  *
  * Keys (UV-K5 and UV-K1): UP/DOWN browse the messages (newest first)
  *   1 bit rate 512/1200/2400 · 2 AC-coupling corner · 3 text AUTO/ALPHA/NUM
- *   4 beep on/off · 5 measure the noise floor again · MENU clear · EXIT quit
- *   (EXIT is read between transmissions, not during one).
+ *   4 beep on/off · MENU clear · EXIT quit (keys are read between
+ *   transmissions, not during one).
  * The speaker plays the transmissions: lower the volume. Settings are saved.
  * The loader re-runs RADIO_SetupRegisters on exit; the app restores the ADC,
  * PA4, the DAC and its clock itself.
@@ -68,30 +69,26 @@
 #define SMP4_POS       12u
 #define ADC_CH_PA4     4u
 #define CYC_PER_SAMPLE (48000000u / POC_FS)        /* 5000 */
-#define CAP_MAX_CYC    (48000000u * 10u)           /* 10 s, then show and re-arm */
+#define CAP_MAX_CYC    (48000000u * 10u)           /* 10 s on a continuous transmission */
 
 /* ---- BK4829 RAW receive ---- */
 #define REG_2B      0x2B
 #define REG_73      0x73
 
-#define TRIG_DB     10     /* carrier: RSSI this far above the floor      */
-#define REARM_DB    5      /* end: RSSI back below floor + this, 4 x 27 ms */
-#define TICK_MS     50
 #define BEEP_HZ     1750
 #define BEEP_MS     80
-#define CFG_MAGIC   0xB5
+#define CFG_MAGIC   0xB6   /* v1.2: new corner table, old settings dropped */
 #define ROWS        5      /* text rows, 32 characters each               */
 
 enum { MODE_AUTO = 0, MODE_ALPHA, MODE_NUM, MODE_COUNT };
 
 static const app_api_t *A;
 static poc_t    d;
-static uint8_t  rate = POC_1200, corner = POC_COFF, mode = MODE_AUTO, beepOn = 1;
+static uint8_t  rate = POC_1200, corner = POC_C1000, mode = MODE_AUTO, beepOn = 1;
 static uint8_t  view, prevKey;
 static uint16_t total;                 /* messages decoded since launch / clear */
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
 static int16_t  rssi;
-static int32_t  floorQ;                /* noise floor, dBm x64 */
 static bool     running, saver;
 static uint32_t tPrev, tCyc;
 static char     str[34];
@@ -144,17 +141,15 @@ static uint16_t adcRead(void){
     return (uint16_t)(ADC_DR&0x0FFFu);
 }
 
-static void measureFloor(void){
-    int32_t f=0;
-    for(uint8_t i=0;i<16;i++){ f+=A->rssi_dbm(); A->delay_ms(5); }
-    floorQ=f*4;
-}
-
-/* ---- one transmission: sample PA4 at 9.6 kHz into the decoder while the
- * carrier lasts (checked every 256 samples), at most CAP_MAX_CYC. Returns the
- * number of messages decoded. ---- */
-static uint8_t capture(void){
-    uint8_t n=0, low=0;
+/* ---- continuous listening: sample PA4 at 9.6 kHz into the decoder. Every
+ * 1024 samples (107 ms) it hands over to keys and display, but only while the
+ * decoder hunts for a sync (no transmission being decoded), so a page is never
+ * cut; on a continuous transmission it stops after CAP_MAX_CYC anyway. No RSSI
+ * trigger: on the K1 the idle RSSI sat 11 dB above the floor measured at
+ * launch and the old trigger fired on noise (v1.1). The sync word is the
+ * detector. Returns the number of messages decoded. ---- */
+static uint8_t listen(void){
+    uint8_t n=0;
     uint16_t k=0;
     adcSelPA4();
     clkStart();
@@ -163,15 +158,11 @@ static uint8_t capture(void){
         while(clkCyc()<next){}
         if(poc_push(&d,adcRead())) n++;
         next+=CYC_PER_SAMPLE;
-        if(++k & 255u) continue;
-        rssi=A->rssi_dbm();
-        if(rssi < floorQ/64+REARM_DB){ if(++low>=4u) break; } else low=0;
-        if(next>=CAP_MAX_CYC) break;
-        /* No get_key() here: its debounced scan takes 0.4 ms or more, i.e.
-         * 4+ sample periods, which smeared about one bit per codeword (v1.0). */
+        if(++k & 1023u) continue;
+        if(d.state==HUNT) break;
+        if(next>=CAP_MAX_CYC){ if(poc_flush(&d)) n++; break; }
     }
     adcRestore();
-    if(poc_flush(&d)) n++;
     return n;
 }
 
@@ -195,7 +186,7 @@ static bool looksAlpha(const poc_msg_t *m,char *txt){
 
 static void draw(void){
     static const char RATE[3][5]={"512","1200","2400"};
-    static const char CORNER[POC_NCORNER][4]={"off","30","60","100","150","250"};
+    static const char CORNER[POC_NCORNER][5]={"off","60","250","1k","1k2","1k5"};
     static const char MODE[MODE_COUNT]={'?','A','N'};
     const poc_msg_t *m=poc_get(&d,view);
     char txt[POC_MAXBITS/4u+1u];      /* on the stack: the 4 KiB overlay is full */
@@ -224,7 +215,7 @@ static void draw(void){
 
     o=put(str,RATE[rate]); o=put(o," AC"); o=put(o,CORNER[corner]);
     *o++=' '; *o++=MODE[mode]; *o++=' ';
-    o=puti(o,rssi); *o++='/'; o=puti(o,floorQ/64);
+    o=puti(o,rssi); o=put(o,"dBm");
     o=put(o," #"); o=puti(o,total);
     if(m && (m->flags&POC_F_BAD)) o=put(o," BAD");
     else if(m && (m->flags&POC_F_FIXED)) o=put(o," fix");
@@ -266,7 +257,6 @@ static void handleKeys(void){
         case APP_KEY_2:    corner=cyc(corner,POC_NCORNER); poc_config(&d,rate,corner); saveCfg(); break;
         case APP_KEY_3:    mode=cyc(mode,MODE_COUNT); saveCfg(); break;
         case APP_KEY_4:    beepOn^=1u; saveCfg(); break;
-        case APP_KEY_5:    measureFloor(); break;
         case APP_KEY_MENU: poc_init(&d,rate,corner); view=0; total=0; break;
         case APP_KEY_UP:
         case APP_KEY_DOWN: {
@@ -294,29 +284,20 @@ void app_main(const app_api_t *api){
     A->audio_path(true);
     A->set_af(APP_AF_FM);
     A->delay_ms(50);
-    measureFloor();
 
     running=true;
     while(running){
-        for(uint8_t i=0;i<TICK_MS/10u;i++){
-            rssi=A->rssi_dbm();
-            if(rssi>=floorQ/64+TRIG_DB){
-                uint8_t n=capture();
-                if(n){
-                    total=(uint16_t)(total+n); view=0;
-                    saver=false; A->backlight_on();
-                    if(beepOn) beep(n);
-                }
-                break;
-            }
-            floorQ+=((int32_t)rssi*64-floorQ)/64;
-            A->delay_ms(10);
-            A->backlight_update();
+        uint8_t n=listen();
+        if(n){
+            total=(uint16_t)(total+n); view=0;
+            saver=false; A->backlight_on();
+            if(beepOn) beep(n);
         }
-        if(!running) break;
+        rssi=A->rssi_dbm();
         handleKeys();
         refresh();
         A->battery_sample();
+        for(uint8_t i=0;i<10u;i++) A->backlight_update();   /* ~10 ticks of 10 ms per pass */
     }
 
     adcRestore();

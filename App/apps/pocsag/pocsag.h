@@ -23,8 +23,8 @@
  * Signal: 512, 1200 or 2400 bps NRZ 2-FSK (+/-4.5 kHz), so the discriminator
  * output is the bit stream itself. Quantized feedback (corner set at
  * init) undoes the droop the audio AC coupling puts on runs of equal bits, each bit is
- * integrated over its slot, and a DPLL on the zero crossings keeps the slots on
- * the bit boundaries. The sync codeword 0x7CD215D8 is searched in both
+ * integrated over its slot, and a DPLL on the zero crossings next to real
+ * transitions keeps the slots on the bit boundaries. The sync codeword 0x7CD215D8 is searched in both
  * polarities (the receive chain may invert), then each batch of 16 codewords is
  * checked with BCH(31,21) + even parity (one bit corrected per codeword) and
  * assembled into messages: RIC (21 bits: 18 from the address codeword, 3 from
@@ -44,8 +44,9 @@
 
 enum { POC_512 = 0, POC_1200 = 1, POC_2400 = 2 };
 
-/* AC-coupling corner the decoder compensates: off, 30, 60, 100, 150, 250 Hz. */
-enum { POC_COFF = 0, POC_C30, POC_C60, POC_C100, POC_C150, POC_C250, POC_NCORNER };
+/* AC-coupling corner the decoder compensates: off, 60, 250, 1000, 1200, 1500 Hz
+ * (the K1 needs 1000-1500; 1000 is the app default). */
+enum { POC_COFF = 0, POC_C60, POC_C250, POC_C1000, POC_C1200, POC_C1500, POC_NCORNER };
 
 enum {                       /* poc_msg_t.flags                                   */
     POC_F_FIXED = 1u << 0,   /* at least one codeword needed a bit corrected       */
@@ -70,7 +71,10 @@ typedef struct {
     int32_t  acc;            /* sum of centred samples over the current bit       */
     uint16_t ph;             /* bit phase, wraps at the bit boundary              */
     uint16_t inc;            /* phase step per sample                              */
+    int16_t  cPrev, cNext;   /* crossing nearest the slot's start / end boundary  */
+    int16_t  pend;           /* clock correction applied at the next mid-slot     */
     uint8_t  sign;           /* sign of the previous centred sample                */
+    uint8_t  lastBit;        /* previous decided bit                              */
     uint8_t  primed;         /* dcQ initialised                                    */
     /* framing */
     uint32_t sr;             /* last 32 bits, newest in bit 0                      */
@@ -87,7 +91,7 @@ typedef struct {
 } poc_t;
 
 /* Reset everything (messages and statistics included) for a bit rate POC_512..
- * POC_2400 and an AC-coupling corner POC_COFF..POC_C250. */
+ * POC_2400 and an AC-coupling corner POC_COFF..POC_C1500. */
 void poc_init(poc_t *d, uint8_t rate, uint8_t corner);
 
 /* Change the bit rate / corner, keeping the messages (takes effect at once;

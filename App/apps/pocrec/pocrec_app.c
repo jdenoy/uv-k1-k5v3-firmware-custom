@@ -17,13 +17,14 @@
 /*
  * POCSAG Rec (RX only) - records part of a POCSAG transmission exactly as the
  * POCSAG app sees it (RAW RX, PA4 held at mid-scale by the DAC, ADC channel 4
- * at 9.6 kHz from the RSSI trigger) and sends it over the programming cable
+ * at 9.6 kHz, started with key 5) and sends it over the programming cable
  * (USART1, 38400 8N1, as set up by the firmware) for analysis on the Mac
  * (pocrec_capture.py). Derived from 406 Rec.
  *
- * Storage: NSAMP samples from t0 ms after the trigger (UP/DOWN: 0-2000 ms in
- * 100 ms steps; 400 ms puts the end of a 1200 bps preamble, the sync and the
- * first codewords in the window). 4 bits each, linear code "lin48": code n
+ * Storage: NSAMP samples from t0 ms after key 5 (UP/DOWN: 0-2000 ms in
+ * 100 ms steps, default 0). v1.0 started on an RSSI trigger, which fired on
+ * noise on the K1 (idle RSSI 11 dB above the floor measured at launch): send
+ * the page, then press 5 while it plays. 4 bits each, linear code "lin48": code n
  * stands for c + (n - 8) * 48 + 24 LSB, c = mean of the first 32 samples
  * (the first sample until then). Codes 0 and 15 count as clipped; the raw
  * minimum and maximum are sent too.
@@ -31,8 +32,8 @@
  *   POCREC <ver> fs 9600 n <NSAMP> t0 <ms> code lin48 c <c> min <min> max <max> rssi <dBm> clip <count>
  *   <lines of up to 100 hex digits, one code per sample>
  *   END
- * Keys (UV-K5 and UV-K1): UP/DOWN start delay · 1 resend the last recording
- *   · EXIT quit.
+ * Keys (UV-K5 and UV-K1): 5 record · UP/DOWN start delay · 1 resend the last
+ *   recording · EXIT quit.
  */
 
 #include <stdint.h>
@@ -77,15 +78,13 @@
 #endif
 #define STEP        48                     /* LSB per code step                     */
 #define T0_MAX      2000u
-#define TRIG_DB     10
-#define TICK_MS     50
 
 static const app_api_t *A;
 static uint8_t  buf[NSAMP / 2u];
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
 static uint32_t tPrev, tCyc;
-static int32_t  floorQ, center;
-static int16_t  rssi, burstRssi, t0 = 400, recT0;
+static int32_t  center;
+static int16_t  rssi, burstRssi, t0 = 0, recT0;
 static uint16_t clip, nRec, vmin, vmax;
 static bool     running, have;
 static uint8_t  prevKey;
@@ -175,12 +174,12 @@ static void draw(const char *state){
     A->draw_battery();
     line(0,put(str,state));
     o=put(str,"t0 "); o=puti(o,t0); o=put(o," ms"); line(1,o);
-    o=puti(str,rssi); *o++='/'; o=puti(o,floorQ/64); o=put(o," dBm"); line(2,o);
+    o=puti(str,rssi); o=put(o," dBm"); line(2,o);
     if(have){
         o=put(str,"rec "); o=puti(o,nRec); o=put(o," c "); o=puti(o,center); line(3,o);
         o=puti(str,vmin); *o++='-'; o=puti(o,vmax); o=put(o," clip "); o=puti(o,clip); line(4,o);
     }
-    line(6,put(str,"1:resend EXIT:quit"));
+    line(6,put(str,"5:rec 1:resend"));
     A->blit_status(); A->blit_full();
 }
 
@@ -201,38 +200,29 @@ void app_main(const app_api_t *api){
     DAC_CR=DAC_CR_BIAS; DAC_DHR12R1=2048u; DAC_SWTRIGR=1u;
     A->delay_ms(50);
 
-    int32_t f=0;
-    for(uint8_t i=0;i<16;i++){ f+=A->rssi_dbm(); A->delay_ms(5); }
-    floorQ=f*4;
-
     running=true;
     while(running){
-        for(uint8_t i=0;i<TICK_MS;i++){
-            rssi=A->rssi_dbm();
-            if(rssi>=floorQ/64+TRIG_DB){
-                draw("REC");
-                record();
-                draw("TX");
-                send();
-                for(uint16_t ms=0; ms<3000u && A->rssi_dbm()>=floorQ/64+5; ms+=10) A->delay_ms(10);
-                break;
-            }
-            floorQ+=((int32_t)rssi*64-floorQ)/64;
-            A->delay_ms(1);
-        }
+        rssi=A->rssi_dbm();
         uint8_t key=A->get_key();
         if(key!=prevKey && key!=APP_KEY_INVALID){
             if(key==APP_KEY_EXIT) running=false;
-            if(key==APP_KEY_1 && have){ draw("TX"); send(); }
+            if(key==APP_KEY_5){
+                draw("REC");
+                record();
+                draw("SEND");
+                send();
+            }
+            if(key==APP_KEY_1 && have){ draw("SEND"); send(); }
             if(key==APP_KEY_UP||key==APP_KEY_DOWN){
                 int16_t n=(int16_t)(t0+100*A->nav_dir(key));
                 if(n>=0 && n<=(int16_t)T0_MAX) t0=n;
             }
         }
         prevKey=key;
-        draw(have?"Sent, WAIT":"WAIT");
+        draw(have?"Sent, ready":"Ready");
         A->battery_sample();
         A->backlight_on();
+        A->delay_ms(50);
     }
 
     DAC_CR=savedDac; DAC_DHR12R1=savedDhr; RCC_APBENR1=savedRcc; GPIOA_MODER=savedModer;
