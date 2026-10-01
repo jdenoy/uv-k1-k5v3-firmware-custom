@@ -9,8 +9,8 @@ Status:
 | Step | State |
 |---|---|
 | Decoder core (`pocsag.c`), host-tested | **Done**: 48/48 tests, including a real K1 capture |
-| Radio app (`pocsag_app.c`) | Decodes on the K1 at 1200 and 2400 bps; **v1.4** (4,048 B) adds the edge latch for 512, to be tested |
-| Bench test on the K1 | 1200 / 2400 bps done (short and 80-character messages); 512 with v1.4, numeric, weak signal to do |
+| Radio app (`pocsag_app.c`) | **v1.4 decodes on the K1 at 512, 1200 and 2400 bps** (lab, 2026-10-01) |
+| Bench test on the K1 | All three rates OK (short and 80-character messages); numeric, weak signal, long runs to do |
 
 ### What the bench found (2026-09-29 to 10-01)
 
@@ -178,8 +178,9 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
    1-3 kHz ripple crosses the latch threshold, and the 1000 Hz compensation
    decodes the 1200 capture clean. v1.4 adds the edge latch and an `auto`
    setting (the default): edge latch at 512, 1000 Hz at 1200 / 2400.
-5. Next: 512 bps with v1.4, a numeric message (`-n`), a weak signal
-   (distance, attenuator), a long run of pages.
+5. **v1.4: 512, 1200 and 2400 bps all good in the lab** (2026-10-01).
+6. Next: a numeric message (`-n`), a weak signal (distance, attenuator), a
+   long run of pages.
    If one fails, record it with POCSAG Rec (`../pocrec`, key 5 while it plays).
 
 ## Version
