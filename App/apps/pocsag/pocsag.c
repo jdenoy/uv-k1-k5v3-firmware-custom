@@ -23,7 +23,8 @@
 #define BCH_POLY  0x769u     /* x^10+x^9+x^8+x^6+x^5+x^3+1 */
 #define DC_SHIFT  9          /* plain DC pull: 512 samples (53 ms)              */
 #define AMP_SHIFT 6          /* level estimate: 64 samples                     */
-#define PLL_SHIFT 3          /* DPLL: move 1/8 of the phase error per crossing */
+#define PLL_SHIFT 2          /* DPLL: move 1/4 of the phase error per transition */
+#define NO_EDGE   (-32768)   /* no crossing seen near this boundary yet          */
 #define SYNC_TOL  2          /* bit errors accepted on the first sync          */
 #define RESYNC_TOL 3         /* ... and on the sync of the following batches   */
 
@@ -34,8 +35,10 @@ _Static_assert((POC_HIST & (POC_HIST - 1u)) == 0u, "POC_HIST must be a power of 
 /* Phase steps for 512 / 1200 / 2400 bps at 9.6 kHz: 65536 * rate / 9600. */
 static const uint16_t INC[3] = { 3495u, 8192u, 16384u };
 
-/* Rebuild corners 0 (off), 30, 60, 100, 150, 250 Hz: 2 pi fc / 9600 in Q16. */
-static const uint16_t KC[POC_NCORNER] = { 0u, 1287u, 2574u, 4289u, 6434u, 10723u };
+/* Rebuild corners 0 (off), 60, 250, 1000, 1200, 1500 Hz: 2 pi fc / 9600 in
+ * Q16 (1500 Hz is close to the 16-bit limit). The K1 audio path measured
+ * about 1-1.5 kHz (README). */
+static const uint16_t KC[POC_NCORNER] = { 0u, 2574u, 10723u, 42893u, 51472u, 64340u };
 
 /* ---- codeword checks ---- */
 uint16_t poc_syndrome(uint32_t cw)
@@ -171,7 +174,7 @@ static bool bit(poc_t *d, uint8_t b)
 void poc_config(poc_t *d, uint8_t rate, uint8_t corner)
 {
     d->inc = INC[rate < 3u ? rate : POC_1200];
-    d->k   = KC[corner < POC_NCORNER ? corner : POC_C60];
+    d->k   = KC[corner < POC_NCORNER ? corner : POC_C1000];
 }
 
 void poc_init(poc_t *d, uint8_t rate, uint8_t corner)
@@ -179,6 +182,7 @@ void poc_init(poc_t *d, uint8_t rate, uint8_t corner)
     uint8_t *p = (uint8_t *)d;
     for (uint16_t i = 0; i < sizeof(*d); i++) p[i] = 0;
     poc_config(d, rate, corner);
+    d->cPrev = d->cNext = NO_EDGE;
     d->cur = POC_HIST - 1u;                   /* first message goes to slot 0 */
 }
 
@@ -190,8 +194,9 @@ bool poc_push(poc_t *d, uint16_t sample)
     /* AC coupling in the audio path (a 1-pole high-pass) makes a run of equal
      * bits droop towards the centre: what it removed is a low-pass of the
      * original levels. Quantized feedback rebuilds it from the decided levels
-     * (+amp / -amp) and adds it back. Its corner is set by poc_init
-     * (host tests: 60 Hz decodes 30-150 Hz coupling, see README.md). */
+     * (+amp / -amp) and adds it back. Its corner is set by poc_init: on the
+     * K1 the audio path is close to a differentiator (about 1 kHz), see
+     * README.md. */
     int32_t v  = x - d->base;
     int32_t y  = v + d->w;
     int32_t ay = y < 0 ? -y : y;
@@ -201,21 +206,36 @@ bool poc_push(poc_t *d, uint16_t sample)
     d->w += (d->k * lag) >> 16;
     d->base += y >> DC_SHIFT;                           /* slow plain DC pull */
 
-    if (sg != d->sign) {                      /* crossing: should sit on a bit boundary (ph = 0) */
+    /* Bit clock. A zero crossing is a candidate edge; the one closest to each
+     * slot boundary is kept (first half of a slot: the boundary at its start,
+     * second half: the one at its end). The loop only moves when the two bits
+     * around a boundary differ: inside a run of equal bits, crossings are
+     * ripple (the K1 audio carries strong 1-3 kHz content) and once dragged
+     * the clock a whole bit off. The correction is applied at mid-slot, so it
+     * can never push the phase across a boundary. */
+    if (sg != d->sign) {
         d->sign = sg;
-        /* Round towards zero: a floored -1 would push 65535 to 0 and
-         * lose the wrap, i.e. drop a bit. */
-        int32_t e = (int16_t)d->ph;
-        int32_t c = e >= 0 ? e >> PLL_SHIFT : -((-e) >> PLL_SHIFT);
-        d->ph = (uint16_t)(d->ph - c);
+        int16_t e = (int16_t)d->ph;             /* >= 0: just after the boundary */
+        int16_t *c = e >= 0 ? &d->cPrev : &d->cNext;
+        if (*c == NO_EDGE || (e < 0 ? -e : e) < (*c < 0 ? -*c : *c)) *c = e;
     }
     d->acc += y;
-    uint16_t np = (uint16_t)(d->ph + d->inc);
-    bool wrap = np < d->ph;
+    uint16_t op = d->ph;
+    uint16_t np = (uint16_t)(op + d->inc);
+    bool wrap = np < op;                      /* before the correction: it never crosses 0 */
+    if (op < 0x8000u && np >= 0x8000u) {         /* mid-slot: apply the pending correction */
+        int32_t e = d->pend;
+        np = (uint16_t)(np - (e >= 0 ? e >> PLL_SHIFT : -((-e) >> PLL_SHIFT)));
+        d->pend = 0;
+    }
     d->ph = np;
     if (!wrap) return false;
     uint8_t b = d->acc < 0;                   /* logical 1 = lower frequency */
     d->acc = 0;
+    if (b != d->lastBit && d->cPrev != NO_EDGE) d->pend = d->cPrev;
+    d->lastBit = b;
+    d->cPrev = d->cNext;
+    d->cNext = NO_EDGE;
     return bit(d, b);
 }
 
