@@ -3,8 +3,9 @@
  *
  *   host_pocsag 512|1200|2400 samples.u16 [corner]
  *
- * corner: AC coupling the decoder compensates, 0 60 250 1000 1200 1500 (Hz,
- * default 60 for the synthetic tests; the app uses 1000, measured on the K1).
+ * corner: AC coupling the decoder compensates, 0 60 250 1000 1500 (Hz), or
+ * 1 = edge latch, 2 = auto as in the app (edge at 512, 1000 Hz above).
+ * Default 60 for the synthetic tests.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,10 +27,10 @@ int main(int argc, char **argv)
 {
     if (argc < 3) { fprintf(stderr, "usage: %s 512|1200|2400 samples.u16 [corner]\n", argv[0]); return 2; }
     int rate = atoi(argv[1]);
-    static const int HZ[POC_NCORNER] = { 0, 60, 250, 1000, 1200, 1500 };
+    static const int HZ[POC_NCORNER] = { 0, 60, 250, 1000, 1500, 1, 2 };   /* 1 = edge, 2 = auto */
     int hz = argc > 3 ? atoi(argv[3]) : 60, corner = POC_NCORNER;
     for (int i = 0; i < POC_NCORNER; i++) if (HZ[i] == hz) corner = i;
-    if (corner == POC_NCORNER) { fprintf(stderr, "corner must be 0 60 250 1000 1200 or 1500\n"); return 2; }
+    if (corner == POC_NCORNER) { fprintf(stderr, "corner must be 0 60 250 1000 1500, 1 (edge) or 2 (auto)\n"); return 2; }
     FILE *f = fopen(argv[2], "rb");
     if (!f) { perror(argv[2]); return 2; }
     static poc_t d;

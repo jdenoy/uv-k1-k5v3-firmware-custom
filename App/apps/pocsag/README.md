@@ -9,8 +9,8 @@ Status:
 | Step | State |
 |---|---|
 | Decoder core (`pocsag.c`), host-tested | **Done**: 48/48 tests, including a real K1 capture |
-| Radio app (`pocsag_app.c`) | v1.2 decodes on the K1 at 1200 and 2400 bps, not 512; **v1.3** (3,916 B) fixes 512, to be tested |
-| Bench test on the K1 | 1200 / 2400 bps done (short and 80-character messages); 512 with v1.3, numeric, weak signal to do |
+| Radio app (`pocsag_app.c`) | Decodes on the K1 at 1200 and 2400 bps; **v1.4** (4,048 B) adds the edge latch for 512, to be tested |
+| Bench test on the K1 | 1200 / 2400 bps done (short and 80-character messages); 512 with v1.4, numeric, weak signal to do |
 
 ### What the bench found (2026-09-29 to 10-01)
 
@@ -60,7 +60,7 @@ message, 3 at most) play when the transmission ends.
 |---|---|
 | Line 0 | RIC, function (`F0`-`F3`), text type (`A` alphanumeric, `N` numeric, `T` tone only), message number / messages kept |
 | Rows below | The text, 32 characters per row, 5 rows |
-| Bottom row | Bit rate, AC-coupling corner (`AC1k`), text mode (`?` auto, `A`, `N`), RSSI, messages decoded (`#`), `fix` (a bit was corrected) or `BAD` (a codeword could not be corrected), `mute` |
+| Bottom row | Bit rate, audio-path setting (`ACaut`), text mode (`?` auto, `A`, `N`), RSSI, messages decoded (`#`), `fix` (a bit was corrected) or `BAD` (a codeword could not be corrected), `mute` |
 
 Keys (UV-K5 and UV-K1):
 
@@ -68,14 +68,15 @@ Keys (UV-K5 and UV-K1):
 |---|---|
 | UP / DOWN | Browse the last 4 messages (newest first; direction follows the firmware's navigation setting) |
 | 1 | Bit rate 512 / 1200 / 2400 |
-| 2 | AC-coupling corner the decoder compensates: off / 60 / 250 / 1000 / 1200 / 1500 Hz (`AC1k` default; the K1 needs 1000-1500) |
+| 2 | Audio path: droop compensation off / 60 / 250 / 1000 / 1500 Hz, edge latch (`edg`), or `aut` (default: edge latch at 512, 1000 Hz above, what the K1 needs) |
 | 3 | Text: auto / alphanumeric / numeric |
 | 4 | Beep on / off |
 | MENU | Clear the messages and the counter |
 | EXIT | Quit (read between transmissions) |
 
 Bit rate, corner, text mode and beep are saved (committed when the app exits).
-v1.2 changed the corner table, so settings saved by v1.0/v1.1 are ignored.
+v1.2 and v1.4 changed the audio-path table: settings saved by older versions are
+ignored.
 Auto text mode shows a message as alphanumeric unless more than a quarter of its
 characters are not printable, then as numeric.
 
@@ -92,7 +93,9 @@ decoder (`pocsag.c`, freestanding, no division):
 1. **Droop compensation.** The audio reaches PA4 through a high-pass (about
    1-1.5 kHz on the K1, see above), which makes a run of equal bits fall back
    to the centre. Quantized feedback rebuilds what the high-pass removed, a
-   low-pass of the decided levels, and adds it back. Its corner is key 2.
+   low-pass of the decided levels, and adds it back. Its corner is key 2. At
+   512 bps on the K1 an **edge latch** replaces it (see the bench notes): a
+   sample beyond half the tracked peak sets the level to its sign.
 2. **Bit clock.** Each bit is integrated over its slot. A DPLL keeps the slot
    boundaries on the transitions: the zero crossing nearest each boundary is
    kept, and the clock moves by 1/4 of its error only when the bits on both
@@ -111,7 +114,7 @@ decoder (`pocsag.c`, freestanding, no division):
    displayed. An idle codeword, the next address, a lost sync or the end of the
    carrier closes a message.
 
-Space: the app uses 3,916 of the 4,096 bytes (v1.3). The text buffer (141 B)
+Space: the app uses 4,048 of the 4,096 bytes (v1.4). The text buffer (141 B)
 lives on the stack in `draw()`, the waiting screen does not show the frequency,
 and tone-only messages are marked `T` in the header instead of a text line.
 
@@ -132,8 +135,12 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
 - K1-like coupling (1 and 1.5 kHz high-pass) with the 1000 Hz corner, three
   bit rates;
 - a real capture from the K1 (`test/k1/`, POCSAG Rec v1.0, rpitx `1234:test`
-  at 1200 bps): RIC 1234, F3, `test`, no bit corrected, at corners 1000, 1200
-  and 1500 Hz;
+  at 1200 bps): RIC 1234, F3, `test`, no bit corrected, at 1000 and 1500 Hz and
+  in `auto`;
+- two real 512 bps captures (no sync in the window): the decoder's bits in
+  edge-latch mode against the bits rebuilt from the pulses
+  (`test/k1_bits512.py`), at most 2 errors (1 and 0 today);
+- edge latch and `auto` on 1 kHz coupling at all rates; emulated UI pauses;
 - the generator itself cross-checked with multimon-ng (same messages decoded).
 
 ## Bench test
@@ -159,7 +166,19 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
    alternating bits, then 64 bits of hold). Host: 4/4 pages at all rates with
    pauses up to 1000 samples; 0% busy on 10 minutes of noise and on the K1
    idle recordings.
-4. Next: 512 bps with v1.3, a numeric message (`-n`), a weak signal
+4. **v1.3 at 512: sync found, text garbage and `BAD`.** The pauses were
+   fixed, the demodulator was not. At 512 bps the K1 audio is a sharp pulse
+   (+/-350) at each bit edge, followed by an opposite shelf (about -/+50 for
+   1-2 ms) of nearly the same area: integrating gives almost nothing back, and
+   the droop compensation (self-referenced level) drifts between pulses.
+   Against ground truth on the two 512 captures (bits rebuilt from the pulse
+   signs), droop compensation at 1000 Hz gives 41 and 38 wrong bits in 156; an
+   **edge latch** (the level is the sign of the last pulse beyond half the
+   tracked peak) gives 1 and 0. At 1200 bps it is the other way round: the
+   1-3 kHz ripple crosses the latch threshold, and the 1000 Hz compensation
+   decodes the 1200 capture clean. v1.4 adds the edge latch and an `auto`
+   setting (the default): edge latch at 512, 1000 Hz at 1200 / 2400.
+5. Next: 512 bps with v1.4, a numeric message (`-n`), a weak signal
    (distance, attenuator), a long run of pages.
    If one fails, record it with POCSAG Rec (`../pocrec`, key 5 while it plays).
 
@@ -167,4 +186,4 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.0`).
-Current: **v1.3**.
+Current: **v1.4**.

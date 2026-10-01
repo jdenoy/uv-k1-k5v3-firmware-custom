@@ -37,10 +37,11 @@ _Static_assert((POC_HIST & (POC_HIST - 1u)) == 0u, "POC_HIST must be a power of 
 /* Phase steps for 512 / 1200 / 2400 bps at 9.6 kHz: 65536 * rate / 9600. */
 static const uint16_t INC[3] = { 3495u, 8192u, 16384u };
 
-/* Rebuild corners 0 (off), 60, 250, 1000, 1200, 1500 Hz: 2 pi fc / 9600 in
- * Q16 (1500 Hz is close to the 16-bit limit). The K1 audio path measured
- * about 1-1.5 kHz (README). */
-static const uint16_t KC[POC_NCORNER] = { 0u, 2574u, 10723u, 42893u, 51472u, 64340u };
+/* Rebuild corners off, 60, 250, 1000, 1500 Hz: 2 pi fc / 9600 in Q16 (1500 Hz
+ * is close to the 16-bit limit). POC_CEDGE uses the edge latch instead, and
+ * POC_CAUTO picks what the K1 needs: edge latch at 512 bps, 1000 Hz above
+ * (README). */
+static const uint16_t KC[POC_CEDGE] = { 0u, 2574u, 10723u, 42893u, 64340u };
 
 /* ---- codeword checks ---- */
 uint16_t poc_syndrome(uint32_t cw)
@@ -175,8 +176,12 @@ static bool bit(poc_t *d, uint8_t b)
 /* ---- demodulator ---- */
 void poc_config(poc_t *d, uint8_t rate, uint8_t corner)
 {
-    d->inc = INC[rate < 3u ? rate : POC_1200];
-    d->k   = KC[corner < POC_NCORNER ? corner : POC_C1000];
+    if (rate > POC_2400) rate = POC_1200;
+    if (corner >= POC_NCORNER) corner = POC_CAUTO;
+    if (corner == POC_CAUTO) corner = rate == POC_512 ? POC_CEDGE : POC_C1000;
+    d->inc  = INC[rate];
+    d->edge = corner == POC_CEDGE;
+    d->k    = d->edge ? 0u : KC[corner];
 }
 
 void poc_init(poc_t *d, uint8_t rate, uint8_t corner)
@@ -196,17 +201,32 @@ bool poc_push(poc_t *d, uint16_t sample)
     /* AC coupling in the audio path (a 1-pole high-pass) makes a run of equal
      * bits droop towards the centre: what it removed is a low-pass of the
      * original levels. Quantized feedback rebuilds it from the decided levels
-     * (+amp / -amp) and adds it back. Its corner is set by poc_init: on the
-     * K1 the audio path is close to a differentiator (about 1 kHz), see
-     * README.md. */
+     * (+amp / -amp) and adds it back. Its corner is set by poc_config: on
+     * the K1 the audio path is close to a differentiator (about 1 kHz), see
+     * README.md. At 512 bps the edge latch below is used instead. */
     int32_t v  = x - d->base;
-    int32_t y  = v + d->w;
-    int32_t ay = y < 0 ? -y : y;
+    int32_t y;
+    if (d->edge) {
+        /* Edge latch (512 bps on the K1): each bit edge is a sharp pulse
+         * followed by an opposite shelf of nearly the same area, so neither
+         * integrating nor rebuilding the levels works. A pulse beyond half the
+         * tracked peak sets the level to its sign; quiet samples feed the DC. */
+        int32_t av = v < 0 ? -v : v;
+        d->pk -= d->pk >> 8;
+        if (av > d->pk) d->pk = av;
+        if (v >  (d->pk >> 1)) d->lvl = 1;
+        if (v < -(d->pk >> 1)) d->lvl = 0;
+        if (av < (d->pk >> 2)) d->base += v >> DC_SHIFT;
+        y = d->lvl ? 4096 : -4096;
+    } else {
+        y = v + d->w;
+        int32_t ay = y < 0 ? -y : y;
+        int32_t lag = (y >= 0 ? d->amp : -d->amp) - d->w;
+        d->amp += (ay - d->amp) >> AMP_SHIFT;
+        d->w += (d->k * lag) >> 16;
+        d->base += y >> DC_SHIFT;                       /* slow plain DC pull */
+    }
     uint8_t sg = y >= 0;
-    int32_t lag = (sg ? d->amp : -d->amp) - d->w;
-    d->amp += (ay - d->amp) >> AMP_SHIFT;
-    d->w += (d->k * lag) >> 16;
-    d->base += y >> DC_SHIFT;                           /* slow plain DC pull */
 
     /* Bit clock. A zero crossing is a candidate edge; the one closest to each
      * slot boundary is kept (first half of a slot: the boundary at its start,

@@ -44,9 +44,11 @@
 
 enum { POC_512 = 0, POC_1200 = 1, POC_2400 = 2 };
 
-/* AC-coupling corner the decoder compensates: off, 60, 250, 1000, 1200, 1500 Hz
- * (the K1 needs 1000-1500; 1000 is the app default). */
-enum { POC_COFF = 0, POC_C60, POC_C250, POC_C1000, POC_C1200, POC_C1500, POC_NCORNER };
+/* Audio-path handling: droop compensation for an AC-coupling corner of off, 60,
+ * 250, 1000 or 1500 Hz; edge latch (each bit edge is a pulse, the level is the
+ * sign of the last one); or auto = what the K1 needs (edge latch at 512 bps,
+ * 1000 Hz at 1200 / 2400; the app default). */
+enum { POC_COFF = 0, POC_C60, POC_C250, POC_C1000, POC_C1500, POC_CEDGE, POC_CAUTO, POC_NCORNER };
 
 enum {                       /* poc_msg_t.flags                                   */
     POC_F_FIXED = 1u << 0,   /* at least one codeword needed a bit corrected       */
@@ -68,6 +70,8 @@ typedef struct {
     int32_t  amp;            /* signal level (mean |sample - centre|), x16        */
     int32_t  w;              /* rebuilt low-frequency part lost to AC coupling    */
     int32_t  k;              /* its corner, 2 pi fc / fs in Q16                    */
+    int32_t  pk;             /* edge latch: decaying peak of |sample - centre|     */
+    uint8_t  edge, lvl;      /* edge latch on; latched level                       */
     int32_t  acc;            /* sum of centred samples over the current bit       */
     uint16_t ph;             /* bit phase, wraps at the bit boundary              */
     uint16_t inc;            /* phase step per sample                              */
@@ -93,7 +97,7 @@ typedef struct {
 } poc_t;
 
 /* Reset everything (messages and statistics included) for a bit rate POC_512..
- * POC_2400 and an AC-coupling corner POC_COFF..POC_C1500. */
+ * POC_2400 and an audio-path setting POC_COFF..POC_CAUTO. */
 void poc_init(poc_t *d, uint8_t rate, uint8_t corner);
 
 /* Change the bit rate / corner, keeping the messages (takes effect at once;
