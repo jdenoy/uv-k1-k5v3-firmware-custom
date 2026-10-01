@@ -188,6 +188,7 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
    decodes the 1200 capture clean. v1.4 adds the edge latch and an `auto`
    setting (the default): edge latch at 512, 1000 Hz at 1200 / 2400.
 5. **v1.4: 512, 1200 and 2400 bps all good in the lab** (2026-10-01).
+   **v1.5** (size-trimmed build) re-tested at the three rates: all good.
 6. Next: a numeric message (`-n`), a weak signal (distance, attenuator), a
    long run of pages.
    If one fails, record it with POCSAG Rec (`../pocrec`, key 5 while it plays).
