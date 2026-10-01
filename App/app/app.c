@@ -36,6 +36,9 @@
     #include "app/fm.h"
 #endif
 #include "app/generic.h"
+#ifdef ENABLE_FEAT_SELCALL
+    #include "app/selcall.h"
+#endif
 #include "app/main.h"
 #include "app/menu.h"
 #ifdef ENABLE_FEAT_F4HWN_RXTX_LOG
@@ -2883,6 +2886,15 @@ Skip:
         RADIO_PrepareTX();
         gFlagPrepareTX = false;
     }
+
+#ifdef ENABLE_FEAT_SELCALL
+    if (gSelCallEndTx) {       // selcall burst sent: end the transmission like a PTT release
+        gSelCallEndTx = false;
+        if (gCurrentFunction == FUNCTION_TRANSMIT)
+            GENERIC_Key_PTT(false);
+        gSelCallTx = false;
+    }
+#endif
 
 #ifdef ENABLE_VOICE
     if (gAnotherVoiceID != VOICE_ID_INVALID) {
