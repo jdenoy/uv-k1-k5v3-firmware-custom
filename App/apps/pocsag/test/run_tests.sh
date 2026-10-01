@@ -10,7 +10,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 CC="${CC:-clang}"
 
-"$CC" -O2 -Wall -Wextra -Werror -o "$TMP/host" "$HERE/host_pocsag.c" "$HERE/../pocsag.c" || exit 1
+"$CC" -O2 -Wall -Wextra -Werror -DPOC_STATS -o "$TMP/host" "$HERE/host_pocsag.c" "$HERE/../pocsag.c" || exit 1
 
 A="1234567:3:A:ADRASEC 27 exercice SATER 14h00 Evreux"
 N="200:0:N:0612345678"

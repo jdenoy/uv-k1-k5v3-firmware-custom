@@ -1,7 +1,7 @@
 /* Host harness: run the POCSAG decoder over a file of little-endian uint16 ADC
  * samples at 9.6 kHz and print every committed message, then the statistics.
  *
- *   host_pocsag 512|1200|2400 samples.u16 [corner]
+ *   host_pocsag 512|1200|2400 samples.u16 [corner]    (build with -DPOC_STATS)
  *
  * corner: AC coupling the decoder compensates, 0 60 250 1000 1500 (Hz), or
  * 1 = edge latch, 2 = auto as in the app (edge at 512, 1000 Hz above).

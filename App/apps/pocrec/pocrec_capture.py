@@ -76,7 +76,7 @@ def decoder():
     exe = os.path.join(tempfile.gettempdir(), "host_pocsag_pocrec")
     srcs = [os.path.join(DEC, "test", "host_pocsag.c"), os.path.join(DEC, "pocsag.c")]
     if not os.path.exists(exe) or any(os.path.getmtime(s) > os.path.getmtime(exe) for s in srcs):
-        if subprocess.call(["clang", "-O2", "-o", exe] + srcs) != 0:
+        if subprocess.call(["clang", "-O2", "-DPOC_STATS", "-o", exe] + srcs) != 0:
             return None
     return exe
 

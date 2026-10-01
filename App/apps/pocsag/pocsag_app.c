@@ -85,7 +85,10 @@ enum { MODE_AUTO = 0, MODE_ALPHA, MODE_NUM, MODE_COUNT };
 
 static const app_api_t *A;
 static poc_t    d;
-static uint8_t  rate = POC_1200, corner = POC_CAUTO, mode = MODE_AUTO, beepOn = 1;
+/* Settings, saved as is (committed by the loader on exit). */
+static struct { uint8_t magic, rate, corner, mode, beep; } cfg =
+    { CFG_MAGIC, POC_1200, POC_CAUTO, MODE_AUTO, 1 };
+static const uint8_t CFG_LIMIT[sizeof cfg] = { 0, 3, POC_NCORNER, MODE_COUNT, 2 };
 static uint8_t  view, prevKey;
 static uint16_t total;                 /* messages decoded since launch / clear */
 static uint32_t savedSqr3, savedSmpr3, savedModer, savedDac, savedRcc, savedDhr;
@@ -188,7 +191,7 @@ static bool looksAlpha(const poc_msg_t *m,char *txt){
 
 static void draw(void){
     static const char RATE[3][5]={"512","1200","2400"};
-    static const char CORNER[POC_NCORNER][5]={"off","60","250","1k","1k5","edg","aut"};
+    static const char CORNER[POC_NCORNER][4]={"off","60","250","1k","1k5","edg","aut"};
     static const char MODE[MODE_COUNT]={'?','A','N'};
     const poc_msg_t *m=poc_get(&d,view);
     char txt[POC_MAXBITS/4u+1u];      /* on the stack: the 4 KiB overlay is full */
@@ -201,10 +204,10 @@ static void draw(void){
     if(!m){
         A->print_normal("Waiting...",0,0,1);
     } else {
-        bool alpha = mode==MODE_ALPHA || (mode==MODE_AUTO && looksAlpha(m,txt));
+        bool alpha = cfg.mode==MODE_ALPHA || (cfg.mode==MODE_AUTO && looksAlpha(m,txt));
         o=puti(str,(int32_t)m->ric); o=put(o," F"); *o++=(char)('0'+m->func);
         *o++=' '; *o++= !m->nbits?'T':alpha?'A':'N';     /* T = tone only */
-        o=put(o,"  "); o=puti(o,view+1); *o++='/'; o=puti(o,d.count<POC_HIST?d.count:POC_HIST);
+        o=put(o,"  "); o=puti(o,view+1); *o++='/'; o=puti(o,poc_kept(&d));
         *o='\0'; A->print_normal(str,0,0,0);
 
         uint8_t len=poc_text(m,alpha,txt);
@@ -215,13 +218,13 @@ static void draw(void){
         }
     }
 
-    o=put(str,RATE[rate]); o=put(o," AC"); o=put(o,CORNER[corner]);
-    *o++=' '; *o++=MODE[mode]; *o++=' ';
+    o=put(str,RATE[cfg.rate]); o=put(o," AC"); o=put(o,CORNER[cfg.corner]);
+    *o++=' '; *o++=MODE[cfg.mode]; *o++=' ';
     o=puti(o,rssi); o=put(o,"dBm");
     o=put(o," #"); o=puti(o,total);
     if(m && (m->flags&POC_F_BAD)) o=put(o," BAD");
     else if(m && (m->flags&POC_F_FIXED)) o=put(o," fix");
-    if(!beepOn) o=put(o," mute");
+    if(!cfg.beep) o=put(o," mute");
     tiny(0,48,o);
 }
 
@@ -232,16 +235,13 @@ static void refresh(void){
     A->blit_full();
 }
 
-/* ---- config (staged, committed by the loader on exit) ---- */
+/* ---- config: each saved field is taken if it is within its limit ---- */
 static void loadCfg(void){
-    uint8_t c[5]; A->cfg_load(c,5);
+    uint8_t c[sizeof cfg]; A->cfg_load(c,sizeof c);
     if(c[0]!=CFG_MAGIC) return;
-    if(c[1]<3u) rate=c[1];
-    if(c[2]<POC_NCORNER) corner=c[2];
-    if(c[3]<MODE_COUNT) mode=c[3];
-    if(c[4]<=1u) beepOn=c[4];
+    for(uint8_t i=1;i<sizeof cfg;i++) if(c[i]<CFG_LIMIT[i]) ((uint8_t *)&cfg)[i]=c[i];
 }
-static void saveCfg(void){ uint8_t c[5]={CFG_MAGIC,rate,corner,mode,beepOn}; A->cfg_save(c,5); }
+static void saveCfg(void){ A->cfg_save((const uint8_t *)&cfg,sizeof cfg); }
 static uint8_t cyc(uint8_t v,uint8_t n){ return (uint8_t)(v+1u<n ? v+1u : 0u); }
 
 /* ---- input ---- */
@@ -255,16 +255,15 @@ static void handleKeys(void){
     A->backlight_on();
     switch(key){
         case APP_KEY_EXIT: running=false; break;
-        case APP_KEY_1:    rate=cyc(rate,3); poc_config(&d,rate,corner); saveCfg(); break;
-        case APP_KEY_2:    corner=cyc(corner,POC_NCORNER); poc_config(&d,rate,corner); saveCfg(); break;
-        case APP_KEY_3:    mode=cyc(mode,MODE_COUNT); saveCfg(); break;
-        case APP_KEY_4:    beepOn^=1u; saveCfg(); break;
-        case APP_KEY_MENU: poc_init(&d,rate,corner); view=0; total=0; break;
+        case APP_KEY_1:    cfg.rate=cyc(cfg.rate,3); poc_config(&d,cfg.rate,cfg.corner); saveCfg(); break;
+        case APP_KEY_2:    cfg.corner=cyc(cfg.corner,POC_NCORNER); poc_config(&d,cfg.rate,cfg.corner); saveCfg(); break;
+        case APP_KEY_3:    cfg.mode=cyc(cfg.mode,MODE_COUNT); saveCfg(); break;
+        case APP_KEY_4:    cfg.beep^=1u; saveCfg(); break;
+        case APP_KEY_MENU: poc_init(&d,cfg.rate,cfg.corner); view=0; total=0; break;
         case APP_KEY_UP:
         case APP_KEY_DOWN: {
             int8_t n=(int8_t)(view+A->nav_dir(key));
-            uint8_t have=d.count<POC_HIST?d.count:POC_HIST;
-            if(n>=0 && n<(int8_t)have) view=(uint8_t)n;
+            if(n>=0 && n<(int8_t)poc_kept(&d)) view=(uint8_t)n;
             break; }
         default: break;
     }
@@ -275,7 +274,7 @@ void app_main(const app_api_t *api){
     A=api;
     view=0; total=0; saver=false; prevKey=APP_KEY_INVALID;
     loadCfg();
-    poc_init(&d,rate,corner);
+    poc_init(&d,cfg.rate,cfg.corner);
 
     savedSqr3=ADC_SQR3; savedSmpr3=ADC_SMPR3; savedModer=GPIOA_MODER; savedDac=DAC_CR;
     savedRcc=RCC_APBENR1; savedDhr=DAC_DHR12R1;
@@ -293,7 +292,7 @@ void app_main(const app_api_t *api){
         if(n){
             total=(uint16_t)(total+n); view=0;
             saver=false; A->backlight_on();
-            if(beepOn) beep(n);
+            if(cfg.beep) beep(n);
         }
         rssi=A->rssi_dbm();
         handleKeys();
