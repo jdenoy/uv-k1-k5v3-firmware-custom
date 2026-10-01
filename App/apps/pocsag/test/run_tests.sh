@@ -66,6 +66,8 @@ for r in 512 1200 2400; do
 run "K1-like: AC 1 kHz, corner 1000 $r bps" $r corner=1000 "--msg=$A" --hpf 1000 --cnr 12 -- "${REF_A[@]}"
 run "K1-like: AC 1.5 kHz, corner 1000 $r bps" $r corner=1000 "--msg=$A" --hpf 1500 --cnr 15 -- "${REF_A[@]}"
 done
+run "80 chars, K1-like, 1200 bps"  1200 corner=1000 "--msg=1234:3:A:this is a very very long text string to test text wraping. do this even work ?" --hpf 1200 --cnr 20 -- \
+                                 "RIC 0001234 F3" "alpha: [this is a very very long text string to test text wraping. do this even work ?]"
 run "combined worst case"        1200 "--msg=$A" --cnr 14 --foff 2000 --invert --clock-ppm 300 --hpf 100 --audio-lpf 3500 -- "${REF_A[@]}"
 for seed in 1 2 3 4; do
 run "CNR 11 dB, seed $seed"      1200 "--msg=$A" --cnr 11 --seed $seed --         "${REF_A[@]}"
