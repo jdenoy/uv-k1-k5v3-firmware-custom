@@ -142,9 +142,10 @@ static uint16_t adcRead(void){
 }
 
 /* ---- continuous listening: sample PA4 at 9.6 kHz into the decoder. Every
- * 1024 samples (107 ms) it hands over to keys and display, but only while the
- * decoder hunts for a sync (no transmission being decoded), so a page is never
- * cut; on a continuous transmission it stops after CAP_MAX_CYC anyway. No RSSI
+ * 1024 samples (107 ms) it hands over to keys and display, but only while
+ * poc_busy() is false: no batch being decoded and no preamble just seen. v1.2
+ * also paused during the preamble, which at 512 bps (55 bits per 1024 samples)
+ * cost the sync word almost every time; on a continuous transmission it stops after CAP_MAX_CYC anyway. No RSSI
  * trigger: on the K1 the idle RSSI sat 11 dB above the floor measured at
  * launch and the old trigger fired on noise (v1.1). The sync word is the
  * detector. Returns the number of messages decoded. ---- */
@@ -159,7 +160,7 @@ static uint8_t listen(void){
         if(poc_push(&d,adcRead())) n++;
         next+=CYC_PER_SAMPLE;
         if(++k & 1023u) continue;
-        if(d.state==HUNT) break;
+        if(!poc_busy(&d)) break;
         if(next>=CAP_MAX_CYC){ if(poc_flush(&d)) n++; break; }
     }
     adcRestore();

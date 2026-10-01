@@ -25,6 +25,8 @@
 #define AMP_SHIFT 6          /* level estimate: 64 samples                     */
 #define PLL_SHIFT 2          /* DPLL: move 1/4 of the phase error per transition */
 #define NO_EDGE   (-32768)   /* no crossing seen near this boundary yet          */
+#define PREAMBLE_MIN  24u    /* alternating bits that mark a preamble            */
+#define PREAMBLE_HOLD 64u    /* bits the app keeps sampling after it             */
 #define SYNC_TOL  2          /* bit errors accepted on the first sync          */
 #define RESYNC_TOL 3         /* ... and on the sync of the following batches   */
 
@@ -233,6 +235,12 @@ bool poc_push(poc_t *d, uint16_t sample)
     uint8_t b = d->acc < 0;                   /* logical 1 = lower frequency */
     d->acc = 0;
     if (b != d->lastBit && d->cPrev != NO_EDGE) d->pend = d->cPrev;
+    /* Preamble detector for poc_busy(): 24 alternating bits in a row (1 in
+     * 16 million on noise) mark a preamble; the app then keeps sampling for
+     * PREAMBLE_HOLD more bits, which covers the sync word that follows. */
+    if (b != d->lastBit) { if (d->alt < 255u) d->alt++; } else d->alt = 0;
+    if (d->alt >= PREAMBLE_MIN) d->hold = PREAMBLE_HOLD;
+    else if (d->hold) d->hold--;
     d->lastBit = b;
     d->cPrev = d->cNext;
     d->cNext = NO_EDGE;

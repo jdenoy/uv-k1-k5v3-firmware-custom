@@ -37,6 +37,10 @@ int main(int argc, char **argv)
     /* POC_HOLES=N emulates a capture loop that stalls every 256 samples for N
      * sample periods and then catches up: those N samples all read the value
      * at the end of the stall. */
+    /* POC_GAP=N emulates the app's UI pauses: every 1024 samples, if the
+     * decoder is not busy (poc_busy), N samples are dropped. */
+    const char *gv = getenv("POC_GAP");
+    int gap = gv ? atoi(gv) : 0, drop = 0;
     const char *hv = getenv("POC_HOLES");
     int holes = hv ? atoi(hv) : 0;
     unsigned char b[2];
@@ -55,7 +59,9 @@ int main(int argc, char **argv)
             continue;
         }
         n++;
+        if (drop > 0) { drop--; continue; }
         if (poc_push(&d, s)) { show(poc_last(&d)); msgs++; }
+        if (gap > 0 && n % 1024 == 0 && !poc_busy(&d)) drop = gap;
     }
     if (poc_flush(&d)) { show(poc_last(&d)); msgs++; }
     fclose(f);

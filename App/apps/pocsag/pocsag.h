@@ -75,6 +75,8 @@ typedef struct {
     int16_t  pend;           /* clock correction applied at the next mid-slot     */
     uint8_t  sign;           /* sign of the previous centred sample                */
     uint8_t  lastBit;        /* previous decided bit                              */
+    uint8_t  alt;            /* alternating bits in a row (preamble detector)     */
+    uint8_t  hold;           /* bits left during which poc_busy() stays true      */
     uint8_t  primed;         /* dcQ initialised                                    */
     /* framing */
     uint32_t sr;             /* last 32 bits, newest in bit 0                      */
@@ -109,6 +111,10 @@ bool poc_flush(poc_t *d);
 /* i-th most recent committed message (0 = newest), or 0 if there is none. */
 const poc_msg_t *poc_get(const poc_t *d, uint8_t i);
 static inline const poc_msg_t *poc_last(const poc_t *d) { return poc_get(d, 0); }
+
+/* True while a transmission is being decoded or a preamble was just seen: the
+ * app must not pause sampling (a pause there costs the sync word). */
+static inline bool poc_busy(const poc_t *d) { return d->state != 0u || d->hold != 0u; }
 
 /* Text of a message into out (size >= POC_MAXBITS / 4 + 1): alpha = 7-bit
  * characters, else numeric BCD. Non-printable characters become '.'.

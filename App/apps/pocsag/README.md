@@ -9,8 +9,8 @@ Status:
 | Step | State |
 |---|---|
 | Decoder core (`pocsag.c`), host-tested | **Done**: 48/48 tests, including a real K1 capture |
-| Radio app (`pocsag_app.c`) | **v1.2 decodes on the K1** (2026-10-01): `1234 F3 A`, `test`, all 4 rpitx repeats (`1/4`) |
-| Bench test on the K1 | 1200 bps done (short and 80-character messages); 512 / 2400 bps, numeric, weak signal to do |
+| Radio app (`pocsag_app.c`) | v1.2 decodes on the K1 at 1200 and 2400 bps, not 512; **v1.3** (3,916 B) fixes 512, to be tested |
+| Bench test on the K1 | 1200 / 2400 bps done (short and 80-character messages); 512 with v1.3, numeric, weak signal to do |
 
 ### What the bench found (2026-09-29 to 10-01)
 
@@ -51,8 +51,8 @@ do not record, publish or act on it. Use the app on amateur paging (DAPNET,
    speaker plays each transmission.
 
 The app samples continuously (no squelch, no RSSI trigger). About every 100 ms,
-while no transmission is being decoded, it reads the keys and updates the
-screen; during a transmission it does not, so keys answer once the page is
+while no transmission is being decoded and no preamble has just been seen, it
+reads the keys and updates the screen; during a transmission it does not, so keys answer once the page is
 over (at most 10 s on a continuous transmission). The beeps (one per decoded
 message, 3 at most) play when the transmission ends.
 
@@ -111,7 +111,7 @@ decoder (`pocsag.c`, freestanding, no division):
    displayed. An idle codeword, the next address, a lost sync or the end of the
    carrier closes a message.
 
-Space: the app uses 3,868 of the 4,096 bytes (v1.2). The text buffer (141 B)
+Space: the app uses 3,916 of the 4,096 bytes (v1.3). The text buffer (141 B)
 lives on the stack in `draw()`, the waiting screen does not show the frequency,
 and tone-only messages are marked `T` in the header instead of a text line.
 
@@ -147,12 +147,24 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
    codewords came out corrupted on both tries (`lon` -> `..b`, `w` -> `.`):
    with +/-4.5 kHz deviation, one FSK tone then sits near the edge of the
    receive filter. Keep the transmitter within a couple of kHz of the VFO.
-3. Next: 512 and 2400 bps (key 1 and `-r`), a numeric message (`-n`), a weak
-   signal (distance, attenuator), a long run of pages.
+3. **2400 bps OK, 512 bps nothing (v1.2, 2026-10-01)** although multimon-ng
+   on an RTL-SDR decoded the 512 pages. POCSAG Rec captures (`r512`) showed
+   the K1 signal is clean at 512 (bit rate measured 512.4, edges on the grid;
+   one window rebuilt from its edges holds address 1234 and both message words,
+   error-free). The fault was the app: v1.2 paused sampling every 1024 samples
+   while hunting for a sync, preamble included. At 512 bps that is every 55 bits,
+   so the pauses kept landing on or just before the sync word (host emulation:
+   1 page in 4 with 200-sample pauses, 0 with 400). v1.3 keeps sampling while
+   `poc_busy()`: a batch is being decoded, or a preamble was just seen (24
+   alternating bits, then 64 bits of hold). Host: 4/4 pages at all rates with
+   pauses up to 1000 samples; 0% busy on 10 minutes of noise and on the K1
+   idle recordings.
+4. Next: 512 bps with v1.3, a numeric message (`-n`), a weak signal
+   (distance, attenuator), a long run of pages.
    If one fails, record it with POCSAG Rec (`../pocrec`, key 5 while it plays).
 
 ## Version
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.0`).
-Current: **v1.2**.
+Current: **v1.3**.
