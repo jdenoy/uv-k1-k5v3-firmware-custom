@@ -68,6 +68,15 @@ run "K1-like: AC 1.5 kHz, corner 1000 $r bps" $r corner=1000 "--msg=$A" --hpf 15
 done
 run "80 chars, K1-like, 1200 bps"  1200 corner=1000 "--msg=1234:3:A:this is a very very long text string to test text wraping. do this even work ?" --hpf 1200 --cnr 20 -- \
                                  "RIC 0001234 F3" "alpha: [this is a very very long text string to test text wraping. do this even work ?]"
+# The app pauses sampling for keys and display when the decoder is not busy:
+# POC_GAP emulates it (600 samples = 62 ms per pause). v1.2 paused during the
+# preamble too and lost 512 bps pages on the K1.
+for r in 512 1200 2400; do
+    python3 "$HERE/genpocsag.py" --rate "$r" --msg "1234:3:A:test" --hpf 1000 --cnr 20 --tx 4 --gap-ms 0 --out "$TMP/g.u16"
+    out="$(POC_GAP=600 "$TMP/host" "$r" "$TMP/g.u16" 1000)"
+    if grep -qF "messages  : 4" <<<"$out"; then echo "  ✅ UI pauses, 4 pages back to back, $r bps"; pass=$((pass + 1))
+    else echo "  ❌ UI pauses, 4 pages back to back, $r bps"; echo "$out" | tail -2; fail=$((fail + 1)); fi
+done
 run "combined worst case"        1200 "--msg=$A" --cnr 14 --foff 2000 --invert --clock-ppm 300 --hpf 100 --audio-lpf 3500 -- "${REF_A[@]}"
 for seed in 1 2 3 4; do
 run "CNR 11 dB, seed $seed"      1200 "--msg=$A" --cnr 11 --seed $seed --         "${REF_A[@]}"
