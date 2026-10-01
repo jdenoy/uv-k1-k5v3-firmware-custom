@@ -114,9 +114,18 @@ decoder (`pocsag.c`, freestanding, no division):
    displayed. An idle codeword, the next address, a lost sync or the end of the
    carrier closes a message.
 
-Space: the app uses 4,048 of the 4,096 bytes (v1.4). The text buffer (141 B)
-lives on the stack in `draw()`, the waiting screen does not show the frequency,
-and tone-only messages are marked `T` in the header instead of a text line.
+Space: the app uses 3,860 of the 4,096 bytes (v1.5; 4,048 in v1.4). The size
+includes the decoder state (384 B of RAM, mostly the 4 kept messages), which
+lives in the same 4 KiB overlay. v1.5 trimmed 188 B without changing behaviour:
+the decoder statistics are compiled for the host tools only (`-DPOC_STATS`),
+the BCH helpers are static (inlined), the settings are one struct saved as is
+and validated against a limit table, the kept-message count is one helper
+(`poc_kept`), and the audio-path labels use 4-byte slots. Not done, because
+they would change what the app does or rely on a fragile compiler option:
+fewer kept messages or a shorter maximum message (RAM), `-fno-tree-ch` (52 B).
+Earlier savings: the text buffer (141 B) lives on the stack in `draw()`, the
+waiting screen does not show the frequency, and tone-only messages are marked
+`T` in the header instead of a text line.
 
 ## Host tests
 
@@ -187,4 +196,4 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
 
 `APP_VER` in `build.sh` is bumped for every build that goes on a radio. It is
 compiled in (`-DAPP_VERSION`) and shown in the status-bar title (e.g. `v1.0`).
-Current: **v1.4**.
+Current: **v1.5** (same decoding as v1.4, smaller).

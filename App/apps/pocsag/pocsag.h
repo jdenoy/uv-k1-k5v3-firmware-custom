@@ -92,7 +92,9 @@ typedef struct {
     uint8_t  open;           /* a message is being assembled in msg[cur]           */
     uint8_t  cur;            /* ring slot being assembled / last committed         */
     uint8_t  count;          /* messages committed (saturates at 255)              */
-    uint16_t nSync, nCw, nFix, nBad;   /* statistics                              */
+#ifdef POC_STATS
+    uint16_t nSync, nCw, nFix, nBad;   /* statistics (host harness only)          */
+#endif
     poc_msg_t msg[POC_HIST];
 } poc_t;
 
@@ -112,6 +114,9 @@ bool poc_push(poc_t *d, uint16_t sample);
  * to sync hunt. Returns true when a message was committed. */
 bool poc_flush(poc_t *d);
 
+/* Messages kept: committed so far, at most POC_HIST. */
+static inline uint8_t poc_kept(const poc_t *d) { return d->count < POC_HIST ? d->count : (uint8_t)POC_HIST; }
+
 /* i-th most recent committed message (0 = newest), or 0 if there is none. */
 const poc_msg_t *poc_get(const poc_t *d, uint8_t i);
 static inline const poc_msg_t *poc_last(const poc_t *d) { return poc_get(d, 0); }
@@ -125,8 +130,5 @@ static inline bool poc_busy(const poc_t *d) { return d->state != 0u || d->hold !
  * Returns the length. */
 uint8_t poc_text(const poc_msg_t *m, bool alpha, char *out);
 
-/* Bit 31..0 codeword helpers, exposed for the tests. */
-uint16_t poc_syndrome(uint32_t cw);
-int      poc_fix(uint32_t *cw);   /* 0 clean, 1 one bit corrected, -1 uncorrectable */
 
 #endif

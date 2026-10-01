@@ -34,6 +34,14 @@ enum { HUNT = 0, WORDS = 1, RESYNC = 2 };
 
 _Static_assert((POC_HIST & (POC_HIST - 1u)) == 0u, "POC_HIST must be a power of 2");
 
+/* Statistics are for the host harness only (-DPOC_STATS); the app does not
+ * show them. */
+#ifdef POC_STATS
+#define POC_STAT(x) (x)
+#else
+#define POC_STAT(x) ((void)0)
+#endif
+
 /* Phase steps for 512 / 1200 / 2400 bps at 9.6 kHz: 65536 * rate / 9600. */
 static const uint16_t INC[3] = { 3495u, 8192u, 16384u };
 
@@ -44,7 +52,7 @@ static const uint16_t INC[3] = { 3495u, 8192u, 16384u };
 static const uint16_t KC[POC_CEDGE] = { 0u, 2574u, 10723u, 42893u, 64340u };
 
 /* ---- codeword checks ---- */
-uint16_t poc_syndrome(uint32_t cw)
+static uint16_t syndrome(uint32_t cw)
 {
     uint32_t w = cw >> 1;                     /* 31-bit BCH codeword, parity dropped */
     for (int8_t i = 30; i >= 10; i--)
@@ -58,9 +66,10 @@ static uint8_t parity(uint32_t v)
     return (uint8_t)(v & 1u);
 }
 
-int poc_fix(uint32_t *cw)
+/* 0 clean, 1 one bit corrected, -1 uncorrectable */
+static int fix(uint32_t *cw)
 {
-    uint16_t s = poc_syndrome(*cw);
+    uint16_t s = syndrome(*cw);
     uint8_t  p = parity(*cw);
     if (!s) {
         if (!p) return 0;
@@ -91,8 +100,7 @@ static uint8_t dist(uint32_t x)               /* bit count, stops early above 4 
 /* ---- message ring ---- */
 const poc_msg_t *poc_get(const poc_t *d, uint8_t i)
 {
-    uint8_t n = d->count < POC_HIST ? d->count : (uint8_t)POC_HIST;
-    if (i >= n) return 0;
+    if (i >= poc_kept(d)) return 0;
     return &d->msg[(uint8_t)(d->cur - i) & (POC_HIST - 1u)];
 }
 
@@ -109,10 +117,10 @@ static bool commit(poc_t *d)
 
 static bool codeword(poc_t *d, uint32_t w)
 {
-    d->nCw++;
-    int r = poc_fix(&w);
-    if (r > 0) d->nFix++;
-    if (r < 0) d->nBad++;
+    int r = fix(&w);
+    POC_STAT(d->nCw++);
+    if (r > 0) POC_STAT(d->nFix++);
+    if (r < 0) POC_STAT(d->nBad++);
 
     if (r >= 0 && w == IDLE_CW) return commit(d);
 
@@ -154,7 +162,7 @@ static bool bit(poc_t *d, uint8_t b)
         if (dist(x) <= SYNC_TOL)       d->inv = 0;
         else if (dist(~x) <= SYNC_TOL) d->inv = 1;
         else return false;
-        d->nSync++;
+        POC_STAT(d->nSync++);
         d->state = WORDS; d->nb = 0; d->cw = 0;
         return false; }
     case WORDS: {
@@ -167,7 +175,7 @@ static bool bit(poc_t *d, uint8_t b)
         if (++d->nb < 32u) return false;
         d->nb = 0;
         uint32_t w = d->inv ? ~d->sr : d->sr;
-        if (dist(w ^ SYNC_CW) <= RESYNC_TOL) { d->nSync++; d->cw = 0; d->state = WORDS; return false; }
+        if (dist(w ^ SYNC_CW) <= RESYNC_TOL) { POC_STAT(d->nSync++); d->cw = 0; d->state = WORDS; return false; }
         d->state = HUNT;
         return commit(d); }
     }
