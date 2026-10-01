@@ -1456,9 +1456,9 @@ void UI_DisplayMenu(void)
             goto copy_menu_choice;
 
 #ifdef ENABLE_FEAT_SELCALL
-        case MENU_SELCALL:
-            strcpy(String, gSelCallTypeNames[gSubMenuSelection < SELCALL_TYPE_COUNT ? gSubMenuSelection : SELCALL_OFF]);
-            break;
+        case MENU_SELCALL:     // MENU_GetLimits keeps the selection within the type names
+            choiceTable = gSelCallTypeNames;
+            goto copy_menu_choice;
 
         case MENU_SC_CD1:
         case MENU_SC_CD2:
