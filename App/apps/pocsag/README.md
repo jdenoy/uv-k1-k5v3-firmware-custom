@@ -10,7 +10,7 @@ Status:
 |---|---|
 | Decoder core (`pocsag.c`), host-tested | **Done**: 48/48 tests, including a real K1 capture |
 | Radio app (`pocsag_app.c`) | **v1.2 decodes on the K1** (2026-10-01): `1234 F3 A`, `test`, all 4 rpitx repeats (`1/4`) |
-| Bench test on the K1 | 1200 bps done; 512 / 2400 bps, weak signal, long messages to do |
+| Bench test on the K1 | 1200 bps done (short and 80-character messages); 512 / 2400 bps, numeric, weak signal to do |
 
 ### What the bench found (2026-09-29 to 10-01)
 
@@ -141,8 +141,14 @@ clock error), decodes it with `test/host_pocsag.c` and checks the messages:
 1. **Done (2026-10-01)**: v1.2, VFO 439.9875 MHz FM wide, corner 1000 Hz,
    `echo "1234:test" | sudo ./pocsag -f 439987500 -r 1200` shows `1234 F3 A  1/4`
    and `test`: the four repeats rpitx sends were all decoded.
-2. Next: 512 and 2400 bps (key 1 and `-r`), a long alphanumeric message, a
-   numeric one (`-n`), a weak signal (distance, attenuator), a long run of pages.
+2. **Done (2026-10-01)**: an 80-character message (`this is a very very long
+   text string to test text wraping. do this even work ?`) decodes in full and
+   wraps over the text rows. Sent 5 kHz off (`-f 439982500`), the same two
+   codewords came out corrupted on both tries (`lon` -> `..b`, `w` -> `.`):
+   with +/-4.5 kHz deviation, one FSK tone then sits near the edge of the
+   receive filter. Keep the transmitter within a couple of kHz of the VFO.
+3. Next: 512 and 2400 bps (key 1 and `-r`), a numeric message (`-n`), a weak
+   signal (distance, attenuator), a long run of pages.
    If one fails, record it with POCSAG Rec (`../pocrec`, key 5 while it plays).
 
 ## Version
