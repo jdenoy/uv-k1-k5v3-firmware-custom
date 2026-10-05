@@ -237,9 +237,17 @@ const char* gSubMenu_NA = "N/A";
 const char* const gSubMenu_RXMode[] =
 {
     "MAIN\nONLY",       // TX and RX on main only
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    "ALL VFO\nRESPOND", // Watch A, C and B and respond
+#else
     "DUAL RX\nRESPOND", // Watch both and respond
+#endif
     "CROSS\nBAND",      // TX on main, RX on secondary
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    "MAIN TX\nALL VFO", // always TX on main, but RX on A, C and B
+#else
     "MAIN TX\nDUAL RX", // always TX on main, but RX on both
+#endif
 #ifdef ENABLE_FEAT_F4HWN_FULL_WATCH
     "FULL RX\nRESPOND", // Watch A, B and priority channels, then respond on the promoted channel
     "MAIN TX\nFULL RX"  // Watch all channels, but always transmit on the selected VFO

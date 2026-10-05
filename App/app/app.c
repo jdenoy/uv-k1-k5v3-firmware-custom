@@ -926,6 +926,14 @@ static uint8_t    gFullWatchScrollPhase;
 static VFO_Info_t *gVfoC;   // loaded VFO C, NULL when empty
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+// With VFO C, the dual-watch modes also cycle through it (A, C, B); Full Watch
+// adds the priority channels.
+#define FULL_WATCH_ACTIVE() (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF)
+#else
+#define FULL_WATCH_ACTIVE() (gEeprom.DUAL_WATCH == DUAL_WATCH_FULL)
+#endif
+
 void APP_FullWatchReset(void)
 {
     gFullWatchForegroundVfo = NULL;
@@ -1004,6 +1012,10 @@ static void FullWatchInitialize(void)
     }
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    // Priority channels are only watched in Full Watch
+    if (gEeprom.DUAL_WATCH == DUAL_WATCH_FULL)
+#endif
     for (uint8_t priority = 0; priority < 2; priority++)
     {
         const uint16_t channel = gEeprom.SCANLIST_PRIORITY_CH[priority];
@@ -1077,7 +1089,7 @@ VFO_Info_t *APP_GetFullWatchDisplayVfo(uint8_t vfo)
 {
     const uint8_t replacementVfo = FullWatchReplacementVfo();
 
-    if (gEeprom.DUAL_WATCH != DUAL_WATCH_FULL ||
+    if (!FULL_WATCH_ACTIVE() ||
         vfo != replacementVfo ||
         gFullWatchForegroundVfo == &gEeprom.VfoInfo[replacementVfo])
         return NULL;
@@ -1112,7 +1124,7 @@ const VFO_Info_t *APP_GetVfoC(void)
 
 static void FullWatchPromoteCurrentBackground(void)
 {
-    if (gEeprom.DUAL_WATCH != DUAL_WATCH_FULL ||
+    if (!FULL_WATCH_ACTIVE() ||
         gFullWatchForegroundVfo == NULL ||
         gRxReceptionMode == RX_MODE_NONE ||
         gScanStateDir != SCAN_OFF ||
@@ -1155,7 +1167,7 @@ static void DualwatchAlternate(void)
     #endif
     {
 #ifdef ENABLE_FEAT_F4HWN_FULL_WATCH
-        if (gEeprom.DUAL_WATCH == DUAL_WATCH_FULL)
+        if (FULL_WATCH_ACTIVE())
             FullWatchAlternate();
         else
 #endif
