@@ -530,6 +530,21 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
         // And set special session settings for actions
         gSetting_set_ptt_session = gSetting_set_ptt;
     #endif
+
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    // VFO C is always present: create it on 144.800 MHz FM if empty (fresh
+    // flash, factory reset, or its memory channel was deleted).
+    if (SETTINGS_FetchVfoC() == 0xFFFF)
+    {
+        static const uint8_t record[0x10] = {
+            0x80, 0xF2, 0xDC, 0x00,             // 14480000 (144.800 MHz), little endian
+            0x00, 0x00, 0x00, 0x00,             // no offset
+            0x00, 0x00, 0x00, 0x00,             // no tones, FM, no shift
+            0xFF, 0xFF, 0xFF, 0x00              // default power/BW/step
+        };
+        SETTINGS_WriteVfoC(FREQ_CHANNEL_FIRST + BAND3_137MHz, record);
+    }
+#endif
 }
 
 void SETTINGS_LoadCalibration(void)
@@ -1336,20 +1351,28 @@ uint16_t SETTINGS_FetchVfoC(void)
 // Stores the given VFO into VFO C and returns the previous VFO C channel
 // (0xFFFF if empty). A previous frequency-mode record is moved into the band
 // slot of that VFO, so reloading the VFO on that channel restores it.
-uint16_t SETTINGS_SwapVfoC(uint8_t vfo, uint16_t channel, const VFO_Info_t *pVfo)
+void SETTINGS_WriteVfoC(uint16_t channel, const uint8_t *record)
 {
-    const uint16_t previous = SETTINGS_FetchVfoC();
-    uint8_t record[0x10];
-    uint8_t buf[8 + 0x10] __attribute__((aligned(4)));
-
-    PY25Q16_ReadBuffer(VFO_C_RECORD_ADDR, record, sizeof(record));
+    uint8_t buf[8 + 0x10];
 
     memset(buf, 0xFF, 8);
     buf[0] = VFO_C_MAGIC;
     buf[2] = channel;
     buf[3] = channel >> 8;
-    SETTINGS_PackChannel(pVfo, buf + 8);
+    memcpy(buf + 8, record, 0x10);
     PY25Q16_WriteBuffer(VFO_C_ADDR, buf, sizeof(buf), false);
+}
+
+uint16_t SETTINGS_SwapVfoC(uint8_t vfo, uint16_t channel, const VFO_Info_t *pVfo)
+{
+    const uint16_t previous = SETTINGS_FetchVfoC();
+    uint8_t record[0x10];
+    uint8_t packed[0x10] __attribute__((aligned(4)));
+
+    PY25Q16_ReadBuffer(VFO_C_RECORD_ADDR, record, sizeof(record));
+
+    SETTINGS_PackChannel(pVfo, packed);
+    SETTINGS_WriteVfoC(channel, packed);
 
     if (IS_FREQ_CHANNEL(previous))
         PY25Q16_WriteBuffer(0x009000 + (previous - FREQ_CHANNEL_FIRST) * 32 + vfo * 16,
