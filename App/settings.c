@@ -643,7 +643,16 @@ bool SETTINGS_FetchChannelScanInfo(const uint16_t channel, uint32_t *frequency, 
     return info.frequency != 0 && info.frequency != 0xFFFFFFFF;
 }
 
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
 bool SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelScanDisplayInfo_t *info)
+{
+    return SETTINGS_FetchRecordScanDisplayInfo(channel * 16, info);
+}
+
+bool SETTINGS_FetchRecordScanDisplayInfo(uint32_t address, ChannelScanDisplayInfo_t *info)
+#else
+bool SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelScanDisplayInfo_t *info)
+#endif
 {
     if (info == NULL)
         return false;
@@ -655,7 +664,11 @@ bool SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelScanDis
         uint8_t  data[8];
     } __attribute__((packed)) raw;
 
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    PY25Q16_ReadBuffer(address, &raw, sizeof(raw));
+#else
     PY25Q16_ReadBuffer(channel * 16, &raw, sizeof(raw));
+#endif
 
     if (raw.frequency == 0 || raw.frequency == 0xFFFFFFFF)
         return false;
@@ -1226,6 +1239,43 @@ void SETTINGS_SaveSettings(void)
     PY25Q16_WriteBuffer(SETTINGS_SCAN_MIX_ADDR, SecBuf, 8, false);
 }
 
+static void SETTINGS_PackChannel(const VFO_Info_t *pVFO, uint8_t *Buf)
+{
+    typedef union {
+        uint8_t _8[8];
+        uint32_t _32[2];
+    } State_t;
+
+    State_t *State;
+
+    State = (State_t *)Buf;
+    State -> _32[0] = pVFO->freq_config_RX.Frequency;
+    State -> _32[1] = pVFO->TX_OFFSET_FREQUENCY;
+
+    State = (State_t *)(Buf + 0x8);
+    State -> _8[0] =  pVFO->freq_config_RX.Code;
+    State -> _8[1] =  pVFO->freq_config_TX.Code;
+    State -> _8[2] = (pVFO->freq_config_TX.CodeType << 4) | pVFO->freq_config_RX.CodeType;
+    State -> _8[3] = (pVFO->Modulation << 4) | pVFO->TX_OFFSET_FREQUENCY_DIRECTION;
+    State -> _8[4] = 0
+        | (pVFO->TX_LOCK << 6)
+        | (pVFO->BUSY_CHANNEL_LOCK << 5)
+        | (pVFO->OUTPUT_POWER      << 2)
+        | (pVFO->CHANNEL_BANDWIDTH << 1)
+        | (pVFO->FrequencyReverse  << 0);
+    State -> _8[5] = ((pVFO->DTMF_PTT_ID_TX_MODE & 7u) << 1)
+#ifdef ENABLE_DTMF_CALLING
+        | ((pVFO->DTMF_DECODING_ENABLE & 1u) << 0)
+#endif
+    ;
+    State -> _8[6] =  pVFO->STEP_SETTING;
+#ifdef ENABLE_FEAT_F4HWN
+    State -> _8[7] =  0;
+#else
+    State -> _8[7] =  pVFO->SCRAMBLING_TYPE;
+#endif
+}
+
 void SETTINGS_SaveChannel(uint16_t Channel, uint8_t VFO, const VFO_Info_t *pVFO, uint8_t Mode)
 {
 #ifdef ENABLE_NOAA
@@ -1243,41 +1293,9 @@ void SETTINGS_SaveChannel(uint16_t Channel, uint8_t VFO, const VFO_Info_t *pVFO,
     }
 
     if (Mode >= 2 || IS_FREQ_CHANNEL(Channel)) { // copy VFO to a channel
-        typedef union {
-            uint8_t _8[8];
-            uint32_t _32[2];
-        } State_t;
-        
-        State_t *State;
+        uint8_t Buf[0x10] __attribute__((aligned(4)));
 
-        uint8_t Buf[0x10];
-
-        State = (State_t *)Buf;
-        State -> _32[0] = pVFO->freq_config_RX.Frequency;
-        State -> _32[1] = pVFO->TX_OFFSET_FREQUENCY;
-
-        State = (State_t *)(Buf + 0x8);
-        State -> _8[0] =  pVFO->freq_config_RX.Code;
-        State -> _8[1] =  pVFO->freq_config_TX.Code;
-        State -> _8[2] = (pVFO->freq_config_TX.CodeType << 4) | pVFO->freq_config_RX.CodeType;
-        State -> _8[3] = (pVFO->Modulation << 4) | pVFO->TX_OFFSET_FREQUENCY_DIRECTION;
-        State -> _8[4] = 0
-            | (pVFO->TX_LOCK << 6)
-            | (pVFO->BUSY_CHANNEL_LOCK << 5)
-            | (pVFO->OUTPUT_POWER      << 2)
-            | (pVFO->CHANNEL_BANDWIDTH << 1)
-            | (pVFO->FrequencyReverse  << 0);
-        State -> _8[5] = ((pVFO->DTMF_PTT_ID_TX_MODE & 7u) << 1)
-#ifdef ENABLE_DTMF_CALLING
-            | ((pVFO->DTMF_DECODING_ENABLE & 1u) << 0)
-#endif
-        ;
-        State -> _8[6] =  pVFO->STEP_SETTING;
-#ifdef ENABLE_FEAT_F4HWN
-        State -> _8[7] =  0;
-#else
-        State -> _8[7] =  pVFO->SCRAMBLING_TYPE;
-#endif
+        SETTINGS_PackChannel(pVFO, Buf);
 
         PY25Q16_WriteBuffer(OffsetVFO, Buf, 0x10, false);
 
@@ -1296,6 +1314,50 @@ void SETTINGS_SaveChannel(uint16_t Channel, uint8_t VFO, const VFO_Info_t *pVFO,
     }
 
 }
+
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+#define VFO_C_MAGIC 0xC5u
+
+// Returns the channel stored in VFO C, or 0xFFFF when VFO C is empty or its
+// memory channel has been deleted since.
+uint16_t SETTINGS_FetchVfoC(void)
+{
+    uint8_t header[4];
+    PY25Q16_ReadBuffer(VFO_C_ADDR, header, sizeof(header));
+
+    const uint16_t channel = header[2] | (header[3] << 8);
+    if (header[0] != VFO_C_MAGIC ||
+        !(IS_FREQ_CHANNEL(channel) || RADIO_CheckValidChannel(channel, false, 0)))
+        return 0xFFFF;
+
+    return channel;
+}
+
+// Stores the given VFO into VFO C and returns the previous VFO C channel
+// (0xFFFF if empty). A previous frequency-mode record is moved into the band
+// slot of that VFO, so reloading the VFO on that channel restores it.
+uint16_t SETTINGS_SwapVfoC(uint8_t vfo, uint16_t channel, const VFO_Info_t *pVfo)
+{
+    const uint16_t previous = SETTINGS_FetchVfoC();
+    uint8_t record[0x10];
+    uint8_t buf[8 + 0x10] __attribute__((aligned(4)));
+
+    PY25Q16_ReadBuffer(VFO_C_RECORD_ADDR, record, sizeof(record));
+
+    memset(buf, 0xFF, 8);
+    buf[0] = VFO_C_MAGIC;
+    buf[2] = channel;
+    buf[3] = channel >> 8;
+    SETTINGS_PackChannel(pVfo, buf + 8);
+    PY25Q16_WriteBuffer(VFO_C_ADDR, buf, sizeof(buf), false);
+
+    if (IS_FREQ_CHANNEL(previous))
+        PY25Q16_WriteBuffer(0x009000 + (previous - FREQ_CHANNEL_FIRST) * 32 + vfo * 16,
+                            record, sizeof(record), false);
+
+    return previous;
+}
+#endif
 
 void SETTINGS_SaveBatteryCalibration(const uint16_t * batteryCalibration)
 {
