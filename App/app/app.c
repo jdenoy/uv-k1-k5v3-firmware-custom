@@ -944,7 +944,8 @@ void APP_FullWatchReset(void)
 }
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-static VFO_Info_t *FullWatchLoadPriority(uint8_t priority, uint16_t channel, uint32_t address, const ChannelAttributes_t *attributes)
+// fetch: the channel record to read, VFO_C_RECORD_ADDR / 16 for a VFO C record
+static VFO_Info_t *FullWatchLoadPriority(uint8_t priority, uint16_t channel, uint16_t fetch, const ChannelAttributes_t *attributes)
 #else
 static VFO_Info_t *FullWatchLoadPriority(uint8_t priority, uint16_t channel, const ChannelAttributes_t *attributes)
 #endif
@@ -953,7 +954,7 @@ static VFO_Info_t *FullWatchLoadPriority(uint8_t priority, uint16_t channel, con
     VFO_Info_t *vfo = &gFullWatchPriorityVfo[priority];
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-    if (!SETTINGS_FetchRecordScanDisplayInfo(address, &info))
+    if (!SETTINGS_FetchChannelScanDisplayInfo(fetch, &info))
 #else
     if (!SETTINGS_FetchChannelScanDisplayInfo(channel, &info))
 #endif
@@ -989,30 +990,22 @@ static void FullWatchInitialize(void)
     gFullWatchBackgroundCount = 0;
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-    // VFO C is watched first, unless A or B already sits on the same channel
-    // (memory) or frequency (frequency mode).
+    // VFO C is watched first, unless A or B already sits on its frequency
     const uint16_t vfoC = SETTINGS_FetchVfoC();
     gVfoC = NULL;
     if (vfoC != 0xFFFF)
     {
-        const bool isMr = IS_MR_CHANNEL(vfoC);
         VFO_Info_t *vfo = FullWatchLoadPriority(2, vfoC,
-                                                isMr ? vfoC * 16u : VFO_C_RECORD_ADDR,
+                                                IS_MR_CHANNEL(vfoC) ? vfoC : VFO_C_RECORD_ADDR / 16u,
                                                 MR_GetChannelAttributes(vfoC));
         gVfoC = vfo;
         for (uint8_t i = 0; vfo != NULL && i < 2; i++)
-        {
-            const VFO_Info_t *ab = &gEeprom.VfoInfo[i];
-            if (isMr ? ab->CHANNEL_SAVE == vfoC
-                     : ab->freq_config_RX.Frequency == vfo->freq_config_RX.Frequency)
+            if (gEeprom.VfoInfo[i].freq_config_RX.Frequency == vfo->freq_config_RX.Frequency)
                 vfo = NULL;
-        }
         if (vfo != NULL)
             gFullWatchBackgroundVfo[gFullWatchBackgroundCount++] = vfo;
     }
-#endif
 
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
     // Priority channels are only watched in Full Watch
     if (gEeprom.DUAL_WATCH == DUAL_WATCH_FULL)
 #endif
@@ -1027,14 +1020,11 @@ static void FullWatchInitialize(void)
             attributes->band > BAND7_470MHz ||
             channel == gEeprom.VfoInfo[0].CHANNEL_SAVE ||
             channel == gEeprom.VfoInfo[1].CHANNEL_SAVE ||
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-            channel == vfoC ||
-#endif
             (priority == 1 && channel == gEeprom.SCANLIST_PRIORITY_CH[0]))
             continue;
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-        VFO_Info_t *vfo = FullWatchLoadPriority(priority, channel, channel * 16u, attributes);
+        VFO_Info_t *vfo = FullWatchLoadPriority(priority, channel, channel, attributes);
 #else
         VFO_Info_t *vfo = FullWatchLoadPriority(priority, channel, attributes);
 #endif
@@ -1110,11 +1100,6 @@ uint8_t APP_GetFullWatchScrollPhase(void)
 }
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-bool APP_IsFullWatchVfoC(const VFO_Info_t *vfo)
-{
-    return vfo == &gFullWatchPriorityVfo[2];
-}
-
 const VFO_Info_t *APP_GetVfoC(void)
 {
     FullWatchInitialize();

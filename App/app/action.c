@@ -129,9 +129,6 @@ void (*const action_opt_table[ACTION_OPT_LEN])(void) = {
 #if defined(ENABLE_FEAT_F4HWN_BEACON) || defined(ENABLE_FEAT_F4HWN_OVERLAY_APPS)
     [ACTION_OPT_BEACON] = &ACTION_Beacon,
 #endif
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-    [ACTION_OPT_VFO_C] = &COMMON_SwapVfoC,
-#endif
 };
 
 static_assert(ARRAY_SIZE(action_opt_table) == ACTION_OPT_LEN);
@@ -141,7 +138,6 @@ static_assert(ACTION_OPT_POWER_HIGH == 20);
 static_assert(ACTION_OPT_REMOVE_OFFSET == 21);
 static_assert(ACTION_OPT_FOXHUNT == 22);
 static_assert(ACTION_OPT_BEACON == 23);
-static_assert(ACTION_OPT_VFO_C == 24);
 
 bool ACTION_IsAvailable(uint8_t action)
 {
@@ -335,9 +331,6 @@ inline static bool ACTION_IsBlockedInFM(uint8_t action)
         case ACTION_OPT_A_B:
         case ACTION_OPT_VFO_MR:
         case ACTION_OPT_SWITCH_DEMODUL:
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-        case ACTION_OPT_VFO_C:
-#endif
 #ifdef ENABLE_VOX
         case ACTION_OPT_VOX:
 #endif
