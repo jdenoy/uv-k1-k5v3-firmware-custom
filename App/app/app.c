@@ -922,6 +922,9 @@ static uint8_t    gFullWatchCurrentBackground = 0xFFu;
 static uint8_t    gFullWatchBackgroundCount;
 static uint8_t    gFullWatchSequenceIndex = 0xFFu;
 static uint8_t    gFullWatchScrollPhase;
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+static VFO_Info_t *gVfoC;   // loaded VFO C, NULL when empty
+#endif
 
 void APP_FullWatchReset(void)
 {
@@ -981,12 +984,14 @@ static void FullWatchInitialize(void)
     // VFO C is watched first, unless A or B already sits on the same channel
     // (memory) or frequency (frequency mode).
     const uint16_t vfoC = SETTINGS_FetchVfoC();
+    gVfoC = NULL;
     if (vfoC != 0xFFFF)
     {
         const bool isMr = IS_MR_CHANNEL(vfoC);
         VFO_Info_t *vfo = FullWatchLoadPriority(2, vfoC,
                                                 isMr ? vfoC * 16u : VFO_C_RECORD_ADDR,
                                                 MR_GetChannelAttributes(vfoC));
+        gVfoC = vfo;
         for (uint8_t i = 0; vfo != NULL && i < 2; i++)
         {
             const VFO_Info_t *ab = &gEeprom.VfoInfo[i];
@@ -1096,6 +1101,12 @@ uint8_t APP_GetFullWatchScrollPhase(void)
 bool APP_IsFullWatchVfoC(const VFO_Info_t *vfo)
 {
     return vfo == &gFullWatchPriorityVfo[2];
+}
+
+const VFO_Info_t *APP_GetVfoC(void)
+{
+    FullWatchInitialize();
+    return gVfoC;
 }
 #endif
 
