@@ -28,6 +28,13 @@ void COMMON_SwitchVFOs()
 #ifdef ENABLE_SCAN_RANGES    
     gScanRangeStart = 0;
 #endif
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    // A -> B -> C -> A: VFO C is swapped in and out of the VFO B row
+    if (gEeprom.TX_VFO)
+        SETTINGS_SwapVfoC();
+
+    if (!gEeprom.VFO_C_SEL)
+#endif
     gEeprom.TX_VFO ^= 1;
 
     if (gInputBoxIndex > 0) {
@@ -90,40 +97,3 @@ void COMMON_SwitchVFOMode()
         }
     }
 }
-
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-// Swaps the selected VFO with VFO C. When VFO C is empty, the selected VFO is
-// only copied into it.
-void COMMON_SwapVfoC(void)
-{
-    const uint8_t vfo = gEeprom.TX_VFO;
-    const uint16_t channel = gEeprom.ScreenChannel[vfo];
-
-#ifdef ENABLE_NOAA
-    if (IS_NOAA_CHANNEL(channel))
-        return;
-#endif
-
-    if (gInputBoxIndex > 0) {
-        gInputBoxIndex = 0;
-        gHasVfoBackup = false;
-    }
-
-    const uint16_t previous = SETTINGS_SwapVfoC(vfo, channel, &gEeprom.VfoInfo[vfo]);
-    if (previous != 0xFFFF)
-    {
-        if (IS_MR_CHANNEL(previous))
-            gEeprom.MrChannel[vfo] = previous;
-        else
-            gEeprom.FreqChannel[vfo] = previous;
-
-        gEeprom.ScreenChannel[vfo] = previous;
-        gRequestSaveVFO            = true;
-        gVfoConfigureMode          = VFO_CONFIGURE_RELOAD;
-    }
-
-    // Reloads VFO C into the Full Watch cycle
-    gFlagReconfigureVfos  = true;
-    gRequestDisplayScreen = DISPLAY_MAIN;
-}
-#endif

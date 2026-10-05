@@ -134,9 +134,8 @@ enum ACTION_OPT_t {
     ACTION_OPT_REMOVE_OFFSET  = 21,
     ACTION_OPT_FOXHUNT        = 22,
     ACTION_OPT_BEACON         = 23,
-    ACTION_OPT_VFO_C          = 24,
 
-    ACTION_OPT_LEN            = 25
+    ACTION_OPT_LEN            = 24
 };
 
 #ifdef ENABLE_VOICE
@@ -283,6 +282,9 @@ typedef struct {
     uint8_t               DAC_GAIN;
 
     VFO_Info_t            VfoInfo[2];
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    bool                  VFO_C_SEL;   // VFO C is in the VFO B row, VFO B is stored
+#endif
     uint32_t              POWER_ON_PASSWORD;
     uint16_t              VOX1_THRESHOLD;
     uint16_t              VOX0_THRESHOLD;
@@ -335,14 +337,18 @@ bool     SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelSca
 void     SETTINGS_ApplyChannelScanDisplayInfo(VFO_Info_t *vfo, uint16_t channel, const ChannelScanDisplayInfo_t *info);
 #endif
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-// VFO C, the third VFO watched by Full Watch: an 8-byte header (magic, channel)
-// followed by a 16-byte channel record, in the spare bytes of the VFO sector.
-#define VFO_C_ADDR       0x0090E8u
-#define VFO_C_RECORD_ADDR (VFO_C_ADDR + 8u)
-bool     SETTINGS_FetchRecordScanDisplayInfo(uint32_t address, ChannelScanDisplayInfo_t *info);
+// VFO C, the third VFO, in the spare bytes of the VFO sector: a 4-byte header
+// then a 16-byte channel record on a 16-byte boundary, so the record reads as
+// pseudo channel VFO_C_RECORD_ADDR / 16.
+#define VFO_C_ADDR        0x0090ECu
+#define VFO_C_RECORD_ADDR 0x0090F0u
+typedef struct {
+    uint16_t sel;               // 0x0000: VFO C sits in the VFO B row
+    uint16_t channel;
+    uint8_t  record[0x10];
+} VfoC_t;
 uint16_t SETTINGS_FetchVfoC(void);
-void     SETTINGS_WriteVfoC(uint16_t channel, const uint8_t *record);
-uint16_t SETTINGS_SwapVfoC(uint8_t vfo, uint16_t channel, const VFO_Info_t *pVfo);
+void     SETTINGS_SwapVfoC(void);
 #endif
 void     SETTINGS_FetchChannelName(char *s, const uint16_t channel);
 void     SETTINGS_FactoryReset(bool bIsAll);

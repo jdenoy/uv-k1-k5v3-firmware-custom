@@ -536,13 +536,18 @@ gEeprom.FreqChannel[1]   = IS_FREQ_CHANNEL(Data16[5]) ? Data16[5] : (FREQ_CHANNE
     // flash, factory reset, or its memory channel was deleted).
     if (SETTINGS_FetchVfoC() == 0xFFFF)
     {
-        static const uint8_t record[0x10] = {
-            0x80, 0xF2, 0xDC, 0x00,             // 14480000 (144.800 MHz), little endian
-            0x00, 0x00, 0x00, 0x00,             // no offset
-            0x00, 0x00, 0x00, 0x00,             // no tones, FM, no shift
-            0xFF, 0xFF, 0xFF, 0x00              // default power/BW/step
+        static const VfoC_t vfoC = {
+            .sel     = 0xFFFF,
+            .channel = FREQ_CHANNEL_FIRST + BAND3_137MHz,
+            .record  = {
+                0x80, 0xF2, 0xDC, 0x00,         // 14480000 (144.800 MHz), little endian
+                0x00, 0x00, 0x00, 0x00,         // no offset
+                0x00, 0x00, 0x00, 0x00,         // no tones, FM, no shift
+                0xFF, 0xFF, 0xFF, 0x00          // default power/BW/step
+            }
         };
-        SETTINGS_WriteVfoC(FREQ_CHANNEL_FIRST + BAND3_137MHz, record);
+        gEeprom.VFO_C_SEL = false;
+        PY25Q16_WriteBuffer(VFO_C_ADDR, &vfoC, sizeof(vfoC), false);
     }
 #endif
 }
@@ -658,16 +663,7 @@ bool SETTINGS_FetchChannelScanInfo(const uint16_t channel, uint32_t *frequency, 
     return info.frequency != 0 && info.frequency != 0xFFFFFFFF;
 }
 
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
 bool SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelScanDisplayInfo_t *info)
-{
-    return SETTINGS_FetchRecordScanDisplayInfo(channel * 16, info);
-}
-
-bool SETTINGS_FetchRecordScanDisplayInfo(uint32_t address, ChannelScanDisplayInfo_t *info)
-#else
-bool SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelScanDisplayInfo_t *info)
-#endif
 {
     if (info == NULL)
         return false;
@@ -679,11 +675,7 @@ bool SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelScanDis
         uint8_t  data[8];
     } __attribute__((packed)) raw;
 
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-    PY25Q16_ReadBuffer(address, &raw, sizeof(raw));
-#else
     PY25Q16_ReadBuffer(channel * 16, &raw, sizeof(raw));
-#endif
 
     if (raw.frequency == 0 || raw.frequency == 0xFFFFFFFF)
         return false;
@@ -1331,54 +1323,47 @@ void SETTINGS_SaveChannel(uint16_t Channel, uint8_t VFO, const VFO_Info_t *pVFO,
 }
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-#define VFO_C_MAGIC 0xC5u
-
-// Returns the channel stored in VFO C, or 0xFFFF when VFO C is empty or its
-// memory channel has been deleted since.
+// Returns the channel stored in VFO C, or 0xFFFF when VFO C is empty; also
+// loads the selection flag.
 uint16_t SETTINGS_FetchVfoC(void)
 {
-    uint8_t header[4];
+    uint16_t header[2];
     PY25Q16_ReadBuffer(VFO_C_ADDR, header, sizeof(header));
 
-    const uint16_t channel = header[2] | (header[3] << 8);
-    if (header[0] != VFO_C_MAGIC ||
-        !(IS_FREQ_CHANNEL(channel) || RADIO_CheckValidChannel(channel, false, 0)))
-        return 0xFFFF;
-
-    return channel;
+    gEeprom.VFO_C_SEL = !header[0];
+    const uint16_t channel = header[1];
+    return channel <= FREQ_CHANNEL_LAST ? channel : 0xFFFF;   // memory or frequency channel
 }
 
-// Stores the given VFO into VFO C and returns the previous VFO C channel
-// (0xFFFF if empty). A previous frequency-mode record is moved into the band
-// slot of that VFO, so reloading the VFO on that channel restores it.
-void SETTINGS_WriteVfoC(uint16_t channel, const uint8_t *record)
-{
-    uint8_t buf[8 + 0x10];
-
-    memset(buf, 0xFF, 8);
-    buf[0] = VFO_C_MAGIC;
-    buf[2] = channel;
-    buf[3] = channel >> 8;
-    memcpy(buf + 8, record, 0x10);
-    PY25Q16_WriteBuffer(VFO_C_ADDR, buf, sizeof(buf), false);
-}
-
-uint16_t SETTINGS_SwapVfoC(uint8_t vfo, uint16_t channel, const VFO_Info_t *pVfo)
+// Swaps the VFO B row with the stored VFO (A -> B -> C -> A) and reloads the
+// row. A frequency-mode record is moved into the VFO B band slot.
+void SETTINGS_SwapVfoC(void)
 {
     const uint16_t previous = SETTINGS_FetchVfoC();
+    if (previous == 0xFFFF)
+        return;
+
     uint8_t record[0x10];
-    uint8_t packed[0x10] __attribute__((aligned(4)));
+    VfoC_t vfoC __attribute__((aligned(4)));
 
     PY25Q16_ReadBuffer(VFO_C_RECORD_ADDR, record, sizeof(record));
 
-    SETTINGS_PackChannel(pVfo, packed);
-    SETTINGS_WriteVfoC(channel, packed);
+    gEeprom.VFO_C_SEL ^= 1;
+    vfoC.sel     = gEeprom.VFO_C_SEL - 1;
+    vfoC.channel = gEeprom.ScreenChannel[1];
+    SETTINGS_PackChannel(&gEeprom.VfoInfo[1], vfoC.record);
+    PY25Q16_WriteBuffer(VFO_C_ADDR, &vfoC, sizeof(vfoC), false);
 
     if (IS_FREQ_CHANNEL(previous))
-        PY25Q16_WriteBuffer(0x009000 + (previous - FREQ_CHANNEL_FIRST) * 32 + vfo * 16,
+    {
+        PY25Q16_WriteBuffer(0x009010 + (previous - FREQ_CHANNEL_FIRST) * 32,
                             record, sizeof(record), false);
+        gEeprom.FreqChannel[1] = previous;
+    }
 
-    return previous;
+    gEeprom.ScreenChannel[1] = previous;
+    SETTINGS_SaveVfoIndices();
+    RADIO_ConfigureChannel(1, VFO_CONFIGURE_RELOAD);
 }
 #endif
 

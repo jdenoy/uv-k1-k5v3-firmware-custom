@@ -57,7 +57,7 @@ static const AddrMapping_t ADDR_MAPPINGS[] = {
                                                 // Fox Hunt / Beacon settings * 8 Bytes 0x90E0 -> 0x90E8
                                                 // (written directly by app/foxhunt.c; concatenated
                                                 // here so aircopy clones them with the VFOs)
-                                                // VFO C header * 8 Bytes 0x90E8 -> 0x90F0
+                                                // VFO C header * 4 Bytes 0x90EC -> 0x90F0
                                                 // VFO C record * 16 Bytes 0x90F0 -> 0x9100
 
     _MK_MAPPING(0x00A000, 0x00A000, 0x00A178),  // Settings * 16 Bytes (ex 0x004000)        0x00A000 -> 0x00A010

@@ -1317,10 +1317,7 @@ static void UI_FormatFrequency(uint32_t freq, char *buffer) {
 #define FULL_WATCH_ARROW_Y     25u
 #define FULL_WATCH_ARROW_WIDTH 16u
 
-static bool gFullWatchArrowsVisible;
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-static uint8_t gFullWatchArrowsX;
-#endif
+static uint8_t gFullWatchArrowsX;   // chevrons x position, 0 when not drawn
 
 static void UI_MAIN_DrawFullWatchArrows(uint8_t x, uint8_t phase)
 {
@@ -1346,23 +1343,14 @@ static void UI_MAIN_DrawFullWatchArrows(uint8_t x, uint8_t phase)
 
 void UI_MAIN_UpdateFullWatchArrows(void)
 {
-    if (!gFullWatchArrowsVisible ||
+    if (!gFullWatchArrowsX ||
         gScreenToDisplay != DISPLAY_MAIN ||
         center_line != CENTER_LINE_NONE ||
         gUpdateDisplay ||
         APP_IsScreenSaverDisplayed())
         return;
 
-    uint8_t count;
-    APP_GetFullWatchBackgroundVfos(&count);
-    if (count == 0)
-        return;
-
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
     const uint8_t x = gFullWatchArrowsX;
-#else
-    const uint8_t x = count == 1 ? 53u : 45u;
-#endif
     UI_MAIN_DrawFullWatchArrows(x, APP_GetFullWatchScrollPhase());
     ST7565_DrawLine(x, (FULL_WATCH_ARROW_Y / 8u) + 1u,
                     &gFrameBuffer[FULL_WATCH_ARROW_Y / 8u][x],
@@ -1372,115 +1360,83 @@ void UI_MAIN_UpdateFullWatchArrows(void)
 #endif
 }
 
-static void UI_MAIN_DrawFullWatchTag(const VFO_Info_t *vfo, uint8_t x1)
-{
-    const uint16_t channel = vfo->CHANNEL_SAVE;
-
-    char text[5];
-    if (IS_MR_CHANNEL(channel))
-        sprintf(text, "%04u", channel + 1u);
-    else
-    {
-        const bool isFrequency = IS_FREQ_CHANNEL(channel);
-        sprintf(text, isFrequency ? "F%u" : "N%u",
-                channel - (isFrequency ? FREQ_CHANNEL_FIRST : NOAA_CHANNEL_FIRST) + 1u);
-    }
-
-    GUI_DisplaySmallestInverse(text, x1 + 2u, 3, false, true, x1 + 19u);
-}
-
 static void UI_MAIN_DrawFullWatchPriorities(void)
 {
-    if (gEeprom.DUAL_WATCH != DUAL_WATCH_FULL ||
-        (gCurrentFunction != FUNCTION_FOREGROUND &&
+    if ((gCurrentFunction != FUNCTION_FOREGROUND &&
          gCurrentFunction != FUNCTION_POWER_SAVE) ||
         gScanStateDir != SCAN_OFF ||
         gCssBackgroundScan)
         return;
 
-    uint8_t count;
-    VFO_Info_t *const *vfos = APP_GetFullWatchBackgroundVfos(&count);
+    uint8_t count = 0;
+    uint8_t i = 0;
+    uint8_t x;
+    VFO_Info_t *const *vfos = NULL;
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    if (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF)
+        vfos = APP_GetFullWatchBackgroundVfos(&count);
+
+    const VFO_Info_t *vfoC = APP_GetVfoC();
+    if (vfoC != NULL && !isMainOnly())
+    {   // VFO C row between A and B: "C" (inverted while watched, VFO C being
+        // the first background slot then), its frequency or channel name, then
+        // the chevrons and the priority channel tags. "B" while VFO C sits in
+        // the VFO B row.
+        i = count && vfos[0] == vfoC;
+        const char letter[2] = {(char)('C' - gEeprom.VFO_C_SEL), 0};
+        (i ? UI_PrintStringSmallNormalInverse : UI_PrintStringSmallNormal)(letter, 1, 0, 3);
+
+        char text[11];
+        const uint16_t channel = vfoC->CHANNEL_SAVE;
+        if (!IS_MR_CHANNEL(channel))
+            UI_FormatFrequency(vfoC->pRX->Frequency, text);
+        else if (vfoC->Name[0] != 0)
+            memcpy(text, vfoC->Name, 7);
+        else
+            sprintf(text, "%04u", channel + 1u);
+        text[7] = 0;
+        UI_PrintStringSmallNormal(text, 11, 0, 3);
+        x = 62u;
+    }
+    else
+#endif
+    {
+        if (gEeprom.DUAL_WATCH != DUAL_WATCH_FULL)
+            return;
+#ifndef ENABLE_FEAT_F4HWN_VFO_C
+        vfos = APP_GetFullWatchBackgroundVfos(&count);
+#endif
+        if (count == 0)
+            return;
+
+        GUI_DisplaySmallest(count == 1 ? "TRIPLE WATCH" : "QUAD WATCH",
+                            3u, 25u, false, true);
+        x = count == 1 ? 53u : 45u;
+    }
+
     if (count == 0)
         return;
 
-    gFullWatchArrowsVisible = true;
-    GUI_DisplaySmallest(count == 1 ? "TRIPLE WATCH" : "QUAD WATCH",
-                        3u, 25u, false, true);
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-    gFullWatchArrowsX = count == 1 ? 53u : 45u;
-#endif
-    UI_MAIN_DrawFullWatchArrows(count == 1 ? 53u : 45u,
-                                APP_GetFullWatchScrollPhase());
+    gFullWatchArrowsX = x;
+    UI_MAIN_DrawFullWatchArrows(x, APP_GetFullWatchScrollPhase());
 
-    for (uint8_t i = 0; i < count; i++)
-        UI_MAIN_DrawFullWatchTag(vfos[i], (count == 1 ? 72u : 64u) + i * 23u);
-}
-
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-// VFO C row on the center line, between A and B, while the radio is idle:
-// "C" (inverted while Full Watch watches it), its frequency or channel name,
-// then the Full Watch chevrons and the priority channel tags.
-static bool UI_MAIN_DrawVfoCLine(void)
-{
-    if (isMainOnly() ||
-        (gCurrentFunction != FUNCTION_FOREGROUND &&
-         gCurrentFunction != FUNCTION_POWER_SAVE) ||
-        gScanStateDir != SCAN_OFF ||
-        gCssBackgroundScan)
-        return false;
-
-    const VFO_Info_t *vfoC = APP_GetVfoC();
-    if (vfoC == NULL)
-        return false;
-
-    uint8_t count = 0;
-    VFO_Info_t *const *vfos = NULL;
-    bool watched = false;
-    if (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF)
+    for (uint8_t x1 = x + 19u; i < count; i++, x1 += 23u)
     {
-        vfos = APP_GetFullWatchBackgroundVfos(&count);
-        for (uint8_t i = 0; i < count; i++)
-            watched |= APP_IsFullWatchVfoC(vfos[i]);
-    }
+        const uint16_t channel = vfos[i]->CHANNEL_SAVE;
 
-    (watched ? UI_PrintStringSmallNormalInverse : UI_PrintStringSmallNormal)("C", 1, 0, 3);
-
-    char text[12];
-    const uint16_t channel = vfoC->CHANNEL_SAVE;
-    if (IS_MR_CHANNEL(channel))
-    {
-        if (vfoC->Name[0] != 0)
-            memcpy(text, vfoC->Name, 7);
+        char text[5];
+        if (IS_MR_CHANNEL(channel))
+            sprintf(text, "%04u", channel + 1u);
         else
-            sprintf(text, "CH-%04u", channel + 1u);
-    }
-    else
-    {
-        const uint32_t frequency = vfoC->pRX->Frequency;
-        sprintf(text, "%u.%03u", frequency / 100000, (frequency % 100000) / 100);
-    }
-    text[7] = 0;
-    UI_PrintStringSmallNormal(text, 11, 0, 3);
-
-    if (count != 0)
-    {
-        gFullWatchArrowsVisible = true;
-        gFullWatchArrowsX = 62u;
-        UI_MAIN_DrawFullWatchArrows(62u, APP_GetFullWatchScrollPhase());
-
-        uint8_t x1 = 81u;
-        for (uint8_t i = 0; i < count; i++)
         {
-            if (APP_IsFullWatchVfoC(vfos[i]))
-                continue;
-            UI_MAIN_DrawFullWatchTag(vfos[i], x1);
-            x1 += 23u;
+            const bool isFrequency = IS_FREQ_CHANNEL(channel);
+            sprintf(text, isFrequency ? "F%u" : "N%u",
+                    channel - (isFrequency ? FREQ_CHANNEL_FIRST : NOAA_CHANNEL_FIRST) + 1u);
         }
-    }
 
-    return true;
+        GUI_DisplaySmallestInverse(text, x1 + 2u, 3, false, true, x1 + 19u);
+    }
 }
-#endif
 #endif
 
 #if defined(ENABLE_SCAN_RANGES) && defined(ENABLE_FEAT_F4HWN_SCAN_SUBAUDIBLE) && ENABLE_FEAT_F4HWN_SCAN_SUBAUDIBLE
@@ -1526,7 +1482,7 @@ void UI_DisplayMain(void)
 
     center_line = CENTER_LINE_NONE;
 #ifdef ENABLE_FEAT_F4HWN_FULL_WATCH
-    gFullWatchArrowsVisible = false;
+    gFullWatchArrowsX = 0;
 #endif
 
 #ifdef ENABLE_FEAT_F4HWN_SCAN_PROGRESS
@@ -1755,6 +1711,15 @@ void UI_DisplayMain(void)
             else
                 memcpy(p_line0 + 0, BITMAP_VFO_NotDefault, sizeof(BITMAP_VFO_NotDefault));
         }
+
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+        // VFO C sits in the VFO B row: inverted "C" tag (same style as
+        // GUI_DisplaySmallestInverse) in place of the marker
+        if (vfo_num && gEeprom.VFO_C_SEL)
+            for (uint8_t i = 0; i < 7; i++)
+                p_line0[i] = (i == 0 || i == 6) ? 0x3E
+                           : 0x7F ^ (uint8_t)(i - 2u < 3u ? gFont3x5['C' - ' '][i - 2u] << 1 : 0);
+#endif
 
         uint32_t frequency = displayVfo->pRX->Frequency;
 
@@ -2485,9 +2450,6 @@ void UI_DisplayMain(void)
     }
 
 #ifdef ENABLE_FEAT_F4HWN_FULL_WATCH
-#ifdef ENABLE_FEAT_F4HWN_VFO_C
-    if (!UI_MAIN_DrawVfoCLine())
-#endif
     UI_MAIN_DrawFullWatchPriorities();
 #endif
 
