@@ -1436,7 +1436,7 @@ static bool UI_MAIN_DrawVfoCLine(void)
     uint8_t count = 0;
     VFO_Info_t *const *vfos = NULL;
     bool watched = false;
-    if (gEeprom.DUAL_WATCH == DUAL_WATCH_FULL)
+    if (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF)
     {
         vfos = APP_GetFullWatchBackgroundVfos(&count);
         for (uint8_t i = 0; i < count; i++)
