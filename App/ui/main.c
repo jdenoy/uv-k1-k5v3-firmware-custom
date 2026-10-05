@@ -70,6 +70,22 @@ center_line_t center_line = CENTER_LINE_NONE;
     }
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+// VFO letter tag (x 0..6) in place of the row marker: VFO C wherever it is
+// shown, else A for the upper row and B for the lower one (C while VFO C sits
+// there). fill: 0x7F inverted (selected), 0x41 outlined (active), 0 plain.
+static void UI_MAIN_DrawVfoTag(uint8_t *p, const VFO_Info_t *vfo, uint8_t vfoNum, uint8_t fill)
+{
+    const char letter = vfo == APP_GetVfoC() ? 'C' - gEeprom.VFO_C_SEL
+                                              : vfoNum ? 'B' + gEeprom.VFO_C_SEL : 'A';
+    const uint8_t *glyph = gFont3x5[letter - ' '];
+
+    for (uint8_t i = 0; i < 7; i++)
+        p[i] = (i == 0 || i == 6) ? (fill ? 0x3E : 0)
+             : fill ^ (uint8_t)(i - 2u < 3u ? glyph[i - 2u] << 1 : 0);
+}
+#endif
+
 #ifdef ENABLE_FEAT_F4HWN_SCAN_PROGRESS
 #define SCAN_PROGRESS_MR_CHANNEL_BYTES ((MR_CHANNELS_MAX + 7u) / 8u)
 // Scan-list name hold, in 10 ms ticks. Counted down on the 10 ms timeslice (not the
@@ -1021,6 +1037,9 @@ void DisplayRSSIBar(const bool now)
 
         clean = !clean;
 
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+        UI_MAIN_DrawVfoTag(p_line0, gRxVfo, gEeprom.RX_VFO, clean ? 0x7F : 0);
+#else
         if(clean) {
             for(uint8_t i = 0; i < sizeof(BITMAP_VFO_Default); i++)
                 p_line0[i] = (p_line0[i] & 0x80) | BITMAP_VFO_Default[i];
@@ -1028,6 +1047,7 @@ void DisplayRSSIBar(const bool now)
             for(uint8_t i = 0; i < sizeof(BITMAP_VFO_Empty); i++)
                 p_line0[i] = (p_line0[i] & 0x80) | BITMAP_VFO_Empty[i];
         }
+#endif
 
         ST7565_DrawLine(0, RxLine + 1, p_line0, sizeof(BITMAP_VFO_Default));
     }
@@ -1378,13 +1398,12 @@ static void UI_MAIN_DrawFullWatchPriorities(void)
 
     const VFO_Info_t *vfoC = APP_GetVfoC();
     if (vfoC != NULL && !isMainOnly())
-    {   // VFO C row between A and B: "C" (inverted while watched, VFO C being
-        // the first background slot then), its frequency or channel name, then
-        // the chevrons and the priority channel tags. "B" while VFO C sits in
-        // the VFO B row.
+    {   // VFO C row between A and B: its tag (inverted while watched, VFO C
+        // being the first background slot then; "B" while VFO C sits in the
+        // VFO B row), frequency or channel name, then the chevrons and the
+        // priority channel tags.
         i = count && vfos[0] == vfoC;
-        const char letter[2] = {(char)('C' - gEeprom.VFO_C_SEL), 0};
-        (i ? UI_PrintStringSmallNormalInverse : UI_PrintStringSmallNormal)(letter, 1, 0, 3);
+        UI_MAIN_DrawVfoTag(gFrameBuffer[3], vfoC, 0, i ? 0x7F : 0);
 
         char text[11];
         const uint16_t channel = vfoC->CHANNEL_SAVE;
@@ -1713,12 +1732,10 @@ void UI_DisplayMain(void)
         }
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-        // VFO C sits in the VFO B row: inverted "C" tag (same style as
-        // GUI_DisplaySmallestInverse) in place of the marker
-        if (vfo_num && gEeprom.VFO_C_SEL)
-            for (uint8_t i = 0; i < 7; i++)
-                p_line0[i] = (i == 0 || i == 6) ? 0x3E
-                           : 0x7F ^ (uint8_t)(i - 2u < 3u ? gFont3x5['C' - ' '][i - 2u] << 1 : 0);
+        // Letter tag in place of the marker just drawn: filled arrow (column 0
+        // 0x3E) -> inverted, empty arrow -> outlined, none -> plain
+        UI_MAIN_DrawVfoTag(p_line0, displayVfo, vfo_num,
+                           p_line0[0] == 0x3E ? 0x7F : p_line0[0] ? 0x41 : 0);
 #endif
 
         uint32_t frequency = displayVfo->pRX->Frequency;
