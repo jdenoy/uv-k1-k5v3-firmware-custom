@@ -341,6 +341,7 @@ void     SETTINGS_ApplyChannelScanDisplayInfo(VFO_Info_t *vfo, uint16_t channel,
 #define VFO_C_RECORD_ADDR (VFO_C_ADDR + 8u)
 bool     SETTINGS_FetchRecordScanDisplayInfo(uint32_t address, ChannelScanDisplayInfo_t *info);
 uint16_t SETTINGS_FetchVfoC(void);
+void     SETTINGS_WriteVfoC(uint16_t channel, const uint8_t *record);
 uint16_t SETTINGS_SwapVfoC(uint8_t vfo, uint16_t channel, const VFO_Info_t *pVfo);
 #endif
 void     SETTINGS_FetchChannelName(char *s, const uint16_t channel);
