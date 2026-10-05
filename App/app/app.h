@@ -43,6 +43,8 @@ VFO_Info_t *const *APP_GetFullWatchBackgroundVfos(uint8_t *count);
 uint8_t APP_GetFullWatchScrollPhase(void);
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
 bool APP_IsFullWatchVfoC(const VFO_Info_t *vfo);
+// Loaded VFO C (in any RX mode), NULL when VFO C is empty.
+const VFO_Info_t *APP_GetVfoC(void);
 #endif
 #endif
 
