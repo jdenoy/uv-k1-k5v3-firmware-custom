@@ -1319,6 +1319,17 @@ static void UI_FormatFrequency(uint32_t freq, char *buffer) {
 
 static bool gFullWatchArrowsVisible;
 
+// Chevrons x position for 1, 2 or 3 background slots; the slot labels follow
+// 19 px further right.
+static uint8_t UI_MAIN_FullWatchArrowsX(uint8_t count)
+{
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    if (count == 3)
+        return 43u;
+#endif
+    return count == 1 ? 53u : 45u;
+}
+
 static void UI_MAIN_DrawFullWatchArrows(uint8_t x, uint8_t phase)
 {
     const uint8_t *glyph = gFont3x5['>' - ' '];
@@ -1355,7 +1366,7 @@ void UI_MAIN_UpdateFullWatchArrows(void)
     if (count == 0)
         return;
 
-    const uint8_t x = count == 1 ? 53u : 45u;
+    const uint8_t x = UI_MAIN_FullWatchArrowsX(count);
     UI_MAIN_DrawFullWatchArrows(x, APP_GetFullWatchScrollPhase());
     ST7565_DrawLine(x, (FULL_WATCH_ARROW_Y / 8u) + 1u,
                     &gFrameBuffer[FULL_WATCH_ARROW_Y / 8u][x],
@@ -1380,10 +1391,15 @@ static void UI_MAIN_DrawFullWatchPriorities(void)
         return;
 
     gFullWatchArrowsVisible = true;
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+    static const char *const labels[] = {"TRIPLE WATCH", "QUAD WATCH", "FIVE WATCH"};
+    GUI_DisplaySmallest(labels[count - 1u], 3u, 25u, false, true);
+#else
     GUI_DisplaySmallest(count == 1 ? "TRIPLE WATCH" : "QUAD WATCH",
                         3u, 25u, false, true);
-    UI_MAIN_DrawFullWatchArrows(count == 1 ? 53u : 45u,
-                                APP_GetFullWatchScrollPhase());
+#endif
+    const uint8_t arrowsX = UI_MAIN_FullWatchArrowsX(count);
+    UI_MAIN_DrawFullWatchArrows(arrowsX, APP_GetFullWatchScrollPhase());
 
     for (uint8_t i = 0; i < count; i++)
     {
@@ -1391,6 +1407,11 @@ static void UI_MAIN_DrawFullWatchPriorities(void)
         const uint16_t channel = vfo->CHANNEL_SAVE;
 
         char text[5];
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+        if (APP_IsFullWatchVfoC(vfo))
+            strcpy(text, "VFOC");
+        else
+#endif
         if (IS_MR_CHANNEL(channel))
             sprintf(text, "%04u", channel + 1u);
         else
@@ -1400,7 +1421,7 @@ static void UI_MAIN_DrawFullWatchPriorities(void)
                     channel - (isFrequency ? FREQ_CHANNEL_FIRST : NOAA_CHANNEL_FIRST) + 1u);
         }
 
-        const uint8_t x1 = (count == 1 ? 72u : 64u) + i * 23u;
+        const uint8_t x1 = arrowsX + 19u + i * 23u;
         GUI_DisplaySmallestInverse(text, x1 + 2u, 3, false, true, x1 + 19u);
     }
 }

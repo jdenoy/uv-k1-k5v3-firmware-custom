@@ -58,6 +58,7 @@
                 "ENABLE_EXTRA_UART_CMD": false,
                 "ENABLE_FEAT_F4HWN": true,
                 "ENABLE_FEAT_F4HWN_FULL_WATCH": false,
+                "ENABLE_FEAT_F4HWN_VFO_C": false,
                 "ENABLE_FEAT_F4HWN_GAME": false,
                 "ENABLE_FEAT_F4HWN_K5VIEWER": false,
                 "ENABLE_FEAT_F4HWN_SPECTRUM": true,
@@ -124,6 +125,7 @@
                 "ENABLE_VOX": true,
                 "ENABLE_AIRCOPY": false,
                 "ENABLE_FEAT_F4HWN_FULL_WATCH": true,
+                "ENABLE_FEAT_F4HWN_VFO_C": true,
                 "ENABLE_FEAT_F4HWN_K5VIEWER": true,
                 "ENABLE_FEAT_F4HWN_GAME": false,
                 "ENABLE_FEAT_F4HWN_PMR": true,
@@ -204,6 +206,7 @@
             "inherits": "Fusion",
             "cacheVariables": {
                 "ENABLE_FEAT_F4HWN_FULL_WATCH": false,
+                "ENABLE_FEAT_F4HWN_VFO_C": false,
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": true,
                 "ENABLE_FEAT_F4HWN_FOXHUNT": true,
                 "ENABLE_FEAT_F4HWN_BEACON": true,

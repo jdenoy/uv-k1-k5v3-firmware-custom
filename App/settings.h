@@ -134,8 +134,9 @@ enum ACTION_OPT_t {
     ACTION_OPT_REMOVE_OFFSET  = 21,
     ACTION_OPT_FOXHUNT        = 22,
     ACTION_OPT_BEACON         = 23,
+    ACTION_OPT_VFO_C          = 24,
 
-    ACTION_OPT_LEN            = 24
+    ACTION_OPT_LEN            = 25
 };
 
 #ifdef ENABLE_VOICE
@@ -332,6 +333,15 @@ bool     SETTINGS_FetchChannelScanInfo(const uint16_t channel, uint32_t *frequen
 bool     SETTINGS_FetchChannelScanDisplayInfo(const uint16_t channel, ChannelScanDisplayInfo_t *info);
 #if defined(ENABLE_FEAT_F4HWN_FULL_WATCH) || defined(ENABLE_FEAT_F4HWN_SCAN_FASTER)
 void     SETTINGS_ApplyChannelScanDisplayInfo(VFO_Info_t *vfo, uint16_t channel, const ChannelScanDisplayInfo_t *info);
+#endif
+#ifdef ENABLE_FEAT_F4HWN_VFO_C
+// VFO C, the third VFO watched by Full Watch: an 8-byte header (magic, channel)
+// followed by a 16-byte channel record, in the spare bytes of the VFO sector.
+#define VFO_C_ADDR       0x0090E8u
+#define VFO_C_RECORD_ADDR (VFO_C_ADDR + 8u)
+bool     SETTINGS_FetchRecordScanDisplayInfo(uint32_t address, ChannelScanDisplayInfo_t *info);
+uint16_t SETTINGS_FetchVfoC(void);
+uint16_t SETTINGS_SwapVfoC(uint8_t vfo, uint16_t channel, const VFO_Info_t *pVfo);
 #endif
 void     SETTINGS_FetchChannelName(char *s, const uint16_t channel);
 void     SETTINGS_FactoryReset(bool bIsAll);
