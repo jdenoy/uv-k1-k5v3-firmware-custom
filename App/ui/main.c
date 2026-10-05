@@ -73,7 +73,8 @@ center_line_t center_line = CENTER_LINE_NONE;
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
 // VFO letter tag (x 0..6) in place of the row marker: VFO C wherever it is
 // shown, else A for the upper row and B for the lower one (C while VFO C sits
-// there). fill: 0x7F inverted (selected), 0x41 outlined (active), 0 plain.
+// there). fill: 0x7F inverted (only the selected VFO, the one edited and
+// transmitted on), 0x41 outlined (active, watched or receiving), 0 plain.
 static void UI_MAIN_DrawVfoTag(uint8_t *p, const VFO_Info_t *vfo, uint8_t vfoNum, uint8_t fill)
 {
     const char letter = vfo == APP_GetVfoC() ? 'C' - gEeprom.VFO_C_SEL
@@ -1038,7 +1039,9 @@ void DisplayRSSIBar(const bool now)
         clean = !clean;
 
 #ifdef ENABLE_FEAT_F4HWN_VFO_C
-        UI_MAIN_DrawVfoTag(p_line0, gRxVfo, gEeprom.RX_VFO, clean ? 0x7F : 0);
+        // the selected VFO stays inverted, another receiving VFO blinks outlined
+        UI_MAIN_DrawVfoTag(p_line0, gRxVfo, gEeprom.RX_VFO,
+                           gEeprom.RX_VFO == gEeprom.TX_VFO ? 0x7F : clean ? 0x41 : 0);
 #else
         if(clean) {
             for(uint8_t i = 0; i < sizeof(BITMAP_VFO_Default); i++)
@@ -1398,12 +1401,12 @@ static void UI_MAIN_DrawFullWatchPriorities(void)
 
     const VFO_Info_t *vfoC = APP_GetVfoC();
     if (vfoC != NULL && !isMainOnly())
-    {   // VFO C row between A and B: its tag (inverted while watched, VFO C
+    {   // VFO C row between A and B: its tag (outlined while watched, VFO C
         // being the first background slot then; "B" while VFO C sits in the
         // VFO B row), frequency or channel name, then the chevrons and the
         // priority channel tags.
         i = count && vfos[0] == vfoC;
-        UI_MAIN_DrawVfoTag(gFrameBuffer[3], vfoC, 0, i ? 0x7F : 0);
+        UI_MAIN_DrawVfoTag(gFrameBuffer[3], vfoC, 0, i ? 0x41 : 0);
 
         char text[11];
         const uint16_t channel = vfoC->CHANNEL_SAVE;
