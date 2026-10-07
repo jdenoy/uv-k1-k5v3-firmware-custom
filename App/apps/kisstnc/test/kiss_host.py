@@ -50,6 +50,22 @@ def open_port(path):
     termios.tcsetattr(fd, termios.TCSANOW, a)
     return fd
 
+def reopen(path, timeout=10.0):
+    """The radio left the USB bus (RF on the cable at key-up re-enumerates it):
+    wait for its port to come back and reopen it."""
+    print('USB link lost (the radio left the bus, usually RF at key-up): waiting for it')
+    end = time.time() + timeout
+    while time.time() < end:
+        time.sleep(0.2)
+        if os.path.exists(path):
+            try:
+                fd = open_port(path)
+                print(f'reopened {path}')
+                return fd
+            except OSError:
+                pass
+    sys.exit(f'{path} did not come back within {timeout:.0f} s')
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('port', nargs='?')
@@ -72,14 +88,22 @@ def main():
         if sent < a.count and time.time() >= next_tx:
             sent += 1
             f = frame(a.call, a.info.encode('latin-1'))
-            os.write(fd, kiss(f))
+            try:
+                os.write(fd, kiss(f))
+            except OSError:
+                os.close(fd); fd = reopen(port); os.write(fd, kiss(f))
             print(f'TX  {decode(f)}')
             next_tx = time.time() + 1
             if sent == a.count:
                 deadline = time.time() + a.listen
-        if not select.select([fd], [], [], 0.05)[0]:
+        try:
+            if not select.select([fd], [], [], 0.05)[0]:
+                continue
+            data = os.read(fd, 512)
+        except OSError:
+            os.close(fd); fd = reopen(port); inframe = False
             continue
-        for b in os.read(fd, 512):
+        for b in data:
             if b == FEND:
                 if inframe and len(buf) > 1 and buf[0] & 0x0F == 0:
                     print(f'RX  {decode(bytes(buf[1:]))}')
