@@ -58,6 +58,11 @@
 #include "version.h"
 #include "stack_usage.h"
 #endif
+#if defined(ENABLE_USB) && defined(ENABLE_FEAT_F4HWN_OVERLAY_INFO)
+#define APP_SERIAL 1
+#include "app/uart.h"
+#include "driver/vcp.h"
+#endif
 
 _Static_assert(sizeof(app_header_t) == 64u && _Alignof(app_header_t) == 4u,
                "app_header_t must stay 64 bytes with word alignment");
@@ -93,6 +98,9 @@ enum {
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_INFO
                        | APP_CAP_SYSINFO
 #endif
+#ifdef APP_SERIAL
+                       | APP_CAP_SERIAL
+#endif
 };
 
 /* Keep the small zero-initialized state together so callbacks can address it
@@ -111,6 +119,9 @@ static struct {
 #endif
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_BEAM
     bool beam_dirty;
+#endif
+#ifdef APP_SERIAL
+    bool serial_used;      /* the app read or wrote the USB serial port */
 #endif
     bool shortcuts_cached;
     uint8_t shortcut_mask;
@@ -193,6 +204,37 @@ static int8_t  app_nav_dir(uint8_t key)
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_INFO
 extern uint8_t _eflash_used;
 extern uint8_t _ebss;
+#endif
+
+#ifdef APP_SERIAL
+/* ---- API level 3: USB serial port ----
+ * Each call re-arms the K5Viewer lock (the countdown CHIRP already uses), so
+ * K5Viewer neither reads the app's bytes as viewer commands nor mixes screen
+ * frames into the app's stream while the app polls the port. */
+extern volatile uint8_t dtr_enable;
+
+static void app_serial_claim(void)
+{
+    app_state.serial_used = true;
+#ifdef ENABLE_FEAT_F4HWN_K5VIEWER
+    gUART_LockK5Viewer = 255;
+#endif
+}
+
+static uint16_t app_serial_read(uint8_t *buf, uint16_t len)
+{
+    app_serial_claim();
+    return UART_VcpRead(buf, len);
+}
+
+static bool app_serial_write(const uint8_t *buf, uint16_t len)
+{
+    app_serial_claim();
+    if (!dtr_enable)
+        return false;
+    cdc_acm_data_send_with_dtr(buf, len);
+    return dtr_enable != 0;   /* cleared on a transfer timeout */
+}
 #endif
 static void    app_led(bool on)        { BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, on); }
 
@@ -756,6 +798,10 @@ static const app_api_t app_api = {
     .sys_stack_free_now  = STACK_FreeNow,
     .sys_stack_free_min  = STACK_FreeMinimum,
 #endif
+#ifdef APP_SERIAL
+    .serial_read         = app_serial_read,
+    .serial_write        = app_serial_write,
+#endif
 };
 
 uint8_t APP_LaunchOverlay(uint8_t slot)
@@ -810,6 +856,9 @@ uint8_t APP_LaunchOverlay(uint8_t slot)
     app_state.run_slot   = slot;   /* for cfg_load / cfg_save / asset_read */
     app_state.asset_size = h.asset_size;
     app_state.cfg_len    = 0;
+#ifdef APP_SERIAL
+    app_state.serial_used = false;
+#endif
     app_rng_mix();
 #ifdef ENABLE_FMRADIO
     app_state.fm_dirty = false;
@@ -856,6 +905,18 @@ uint8_t APP_LaunchOverlay(uint8_t slot)
     APP_ModalScreenSaverExit();
     app_state.allow_screen_saver = false;
     app_state.screen_saver_wake = false;
+
+#ifdef APP_SERIAL
+    /* Bytes left by the app (a half frame) must not reach the CHIRP parser or
+     * K5Viewer once the main loop resumes. */
+    if (app_state.serial_used) {
+        UART_VcpFlush();
+#ifdef ENABLE_FEAT_F4HWN_K5VIEWER
+        VCP_K5ViewerSync();
+        gUART_LockK5Viewer = 0;
+#endif
+    }
+#endif
 
     /* Restore the resident RX/dual-watch tuning the app ran on top of. */
     gEeprom.RX_VFO = saved_rx_vfo;

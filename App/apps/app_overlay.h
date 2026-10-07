@@ -104,6 +104,8 @@
 /* BEAM channel bridge only (beam_prepare/get/save/draw); the app drives the
  * FSK modem itself through bk_read/bk_write. */
 #define APP_CAP_BEAM2         0x00000010u
+/* USB serial port (serial_read / serial_write, API level 3). */
+#define APP_CAP_SERIAL        0x00000020u
 
 /* Aligned RAM objects; app_overlay.c pins every serialized field offset. */
 typedef struct {

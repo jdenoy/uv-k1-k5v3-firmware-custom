@@ -43,6 +43,17 @@ void VCP_Init()
 }
 
 #ifdef ENABLE_FEAT_F4HWN_K5VIEWER
+static uint8_t      k5v_read_ptr = 0;
+static ParseState_t k5v_state    = STATE_IDLE;
+
+/* Skip what arrived while an overlay app owned the port (its serial data is
+ * no K5Viewer traffic) and restart the parser from a clean state. */
+void VCP_K5ViewerSync(void)
+{
+    k5v_read_ptr = (uint8_t)VCP_RxBufPointer;
+    k5v_state    = STATE_IDLE;
+}
+
 bool VCP_K5ViewerPing(void)
 {
     // State machine for parsing incoming packets:
@@ -69,8 +80,8 @@ bool VCP_K5ViewerPing(void)
     //   KEY_3  → <b>  → KEYBOARD_InjectKey(b, false), IDLE
     //   KEY_3L → <b>  → KEYBOARD_InjectKey(b, true), IDLE
 
-    static uint8_t      read_ptr = 0;
-    static ParseState_t state    = STATE_IDLE;
+    uint8_t      read_ptr = k5v_read_ptr;
+    ParseState_t state    = k5v_state;
 
     bool     connected = false;
     uint8_t  write_ptr = VCP_RxBufPointer;  // snapshot once — ISR may update concurrently
@@ -93,6 +104,8 @@ bool VCP_K5ViewerPing(void)
             connected = true;
     }
 
+    k5v_read_ptr = read_ptr;
+    k5v_state    = state;
     return connected;
 }
 #endif // ENABLE_FEAT_F4HWN_K5VIEWER

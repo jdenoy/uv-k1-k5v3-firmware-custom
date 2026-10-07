@@ -205,6 +205,29 @@ typedef union
     static uint16_t VCP_ReadIndex;
 #endif
 
+#if defined(ENABLE_USB) && defined(ENABLE_FEAT_F4HWN_OVERLAY_APPS)
+/* Overlay apps (API serial_read): received USB bytes from the parser's own
+ * read index, so the bytes an app consumed are never parsed as commands.  The
+ * ISR may leave the write index at the ring size before wrapping it. */
+_Static_assert(sizeof(VCP_RxBuf) == 256u, "the ring indexes wrap as uint8_t");
+uint16_t UART_VcpRead(uint8_t *buf, uint16_t len)
+{
+    const uint8_t w = (uint8_t)VCP_RxBufPointer;
+    uint8_t r = (uint8_t)VCP_ReadIndex;
+    uint16_t n = 0;
+    while (n < len && r != w)
+        buf[n++] = VCP_RxBuf[r++];
+    VCP_ReadIndex = r;
+    return n;
+}
+
+/* Drop the unread bytes (an app's half-read frame) before the parser resumes. */
+void UART_VcpFlush(void)
+{
+    VCP_ReadIndex = (uint8_t)VCP_RxBufPointer;
+}
+#endif
+
 // static bool     bIsEncrypted = true;
 #define bIsEncrypted true
 
