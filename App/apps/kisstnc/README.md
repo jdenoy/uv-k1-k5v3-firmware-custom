@@ -5,9 +5,44 @@ Goal: send and receive APRS frames on the UV-K1 / UV-K5 v3 from
 application (map, messages, beacons) and the radio acting as the TNC: Bell 202
 AFSK 1200 bauds on air, KISS over the USB-C cable to the phone (USB OTG).
 
-Status: **study, no code yet**. Verdict: **feasible**, with one resident
-change (a serial service in the app API) and one new overlay app built from the
-APRS RX demodulator and the APRS TX modulator. Details and plan below.
+Status: **step 0 built, host-tested, not yet tried on the radio** (v0.1:
+USB link test, no radio). Verdict of the study: **feasible**, with one
+resident change (a serial service in the app API, done) and one overlay app
+built from the APRS RX demodulator and the APRS TX modulator. Details and plan
+below.
+
+## Step 0: USB link test (v0.1)
+
+What is in this branch:
+
+- **Resident** (Labs, `BUILD_TAG` `KT1`, welcome screen `v6.1.0 KT1`): API level
+  3 with `serial_read` / `serial_write` and capability `APP_CAP_SERIAL`
+  (`App/apps/app_api.h`, `app_overlay.c`, `App/app/uart.c`, `App/driver/vcp.c`).
+  Cost: +260 B flash (115,176 B, 5,656 B free), 0 B RAM.
+- **App** `KISS TNC` v0.1 (`kisstnc_app.c`, 1,616 B): reads KISS from USB,
+  decodes the frames, echoes each data frame back (key 1 toggles the echo), and
+  key 2 sends a test frame `CALL>APZK1:>UV-K1 KISS TNC test` from the
+  boot-message callsign. Screen: `USB OK` / `NO HOST` (DTR), bytes in, frames
+  in / out, KISS errors, last source callsign and length, last 8 bytes in hex.
+- **Tests**: `test/test_kiss.py` (host build of the app against a mock API,
+  APRSdroid-shaped traffic in odd USB packet sizes: escapes, a 220 B frame,
+  noise, a SETHW command, a bad escape; 5 checks pass), `test/kiss_host.py`
+  (stand-in for APRSdroid on a Mac or Linux PC).
+
+On the radio:
+
+1. Flash `f4hwn.labs.bin` of this branch (the app needs API level 3: older
+   firmware refuses it), check `v6.1.0 KT1` on the welcome screen.
+2. Install `KISSTNC.app` (build/Apps/) as the other apps, launch **KISS TNC**.
+3. Computer first: `python3 test/kiss_host.py --call F4WAT --count 3`. Expected:
+   `USB OK` on the radio, three `TX` lines, the same three as `RX` lines (echo),
+   and a `RX F4WAT>APZK1:>UV-K1 KISS TNC test` line after pressing 2.
+4. Then APRSdroid: Preferences > Connection: Connection protocol **TNC
+   (KISS)**, Connection type **USB serial** (baud rate: any, ignored), empty
+   KISS init string. Plug the OTG cable, start APRSdroid tracking, accept the
+   USB permission. Expected: the log shows "Opened CDCSerialDevice", each
+   beacon APRSdroid sends comes back in its log as received (echo), key 2 adds
+   the test frame.
 
 ## Ways to connect APRSdroid to the radio
 
@@ -85,9 +120,17 @@ bool     (*serial_write)(const uint8_t *buf, uint16_t len);
 ```
 
 Both are thin wrappers (`VCP_RxBuf` ring copy with `VCP_ReadIndex`,
-`cdc_acm_data_send_with_dtr`), estimated 60 to 100 B of resident flash. On app
-exit the loader should also drop unread bytes, so a half KISS frame never
-reaches the CHIRP command parser.
+`cdc_acm_data_send_with_dtr`). On app exit the loader drops unread bytes, so a
+half KISS frame never reaches the CHIRP command parser. K5Viewer reads the same
+ring from each `blit_full` / `blit_line` of an app: every serial call re-arms
+its lock (`gUART_LockK5Viewer`, the countdown CHIRP uses), so binary KISS data is
+never taken for viewer commands (`55 AA 00 00` keep-alive, `AA 55 03 xx` key
+injection), and its parser restarts past the app's bytes on exit. Measured
+cost: +244 B of flash for the service, +16 B for the build tag.
+
+The fields sit after the Labs system-information block, whose presence is
+conditional: every preset that runs overlay apps (Labs) has it, so an app using
+the port builds with `-DENABLE_FEAT_F4HWN_OVERLAY_INFO`, as SSTV does.
 
 This changes the ABI shared with upstream: to be proposed to Armel (F4HWN)
 before relying on it outside this fork.
@@ -129,7 +172,7 @@ before relying on it outside this fork.
 
 | Step | Content | Check |
 |---|---|---|
-| 0 | Resident `serial_read` / `serial_write` + a tiny **loopback app** (shows the bytes received, echoes them back) | `screen` / `minicom` on the Mac, then APRSdroid connects (log shows "Opened CDCSerialDevice") |
+| 0 | Resident `serial_read` / `serial_write` + a tiny **loopback app** (shows the bytes received, echoes them back). **Built, host-tested** | `test/kiss_host.py` on the Mac, then APRSdroid connects (log shows "Opened CDCSerialDevice") |
 | 1 | **RX**: APRS RX demodulator + KISS out | APRSdroid shows stations heard on 144.800 MHz on its map; host test: model frames vs KISS bytes |
 | 2 | **TX**: KISS in + APRS TX modulator, CSMA | APRSdroid beacon decoded by APRS RX on a second radio, multimon-ng, and seen on aprs.fi through a digipeater/iGate |
 | 3 | KISS parameters, screen, size pass | Overlay size, on-air soak test |
