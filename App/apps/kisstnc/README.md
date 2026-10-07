@@ -5,11 +5,64 @@ Goal: send and receive APRS frames on the UV-K1 / UV-K5 v3 from
 application (map, messages, beacons) and the radio acting as the TNC: Bell 202
 AFSK 1200 bauds on air, KISS over the USB-C cable to the phone (USB OTG).
 
-Status: **step 0 built, host-tested, not yet tried on the radio** (v0.1:
-USB link test, no radio). Verdict of the study: **feasible**, with one
-resident change (a serial service in the app API, done) and one overlay app
-built from the APRS RX demodulator and the APRS TX modulator. Details and plan
-below.
+Status: **v0.2, RX and TX built and host-tested, not yet tried on the air**.
+Step 0 (USB link, v0.1) works on the radio with APRSdroid.
+
+## v0.2: the TNC
+
+- **RX**: the APRS RX demodulator, unchanged. Every AX.25 frame with a good FCS
+  goes to the host as a KISS data frame (FCS stripped, the copy from a second
+  slicer dropped), sent in the next housekeeping slot (50 ms, between frames),
+  never inside the 9.6 kHz sampling loop. Unlike APRS RX, no APRS-only UI check:
+  a TNC passes every AX.25 frame.
+- **TX**: KISS bytes are read from USB every 10 ms inside the sampling loop. A
+  data frame waits for a clear channel (no slicer inside a preamble or a frame),
+  then p-persistence (KISS P, default 63: one chance in four per 50 ms slot). It
+  is sent with the APRS TX modulator: TXDELAY flags (40 = 267 ms by default, or
+  KISS TXDELAY x 1.5), the frame bit-stuffed with its FCS, 3 tail flags, then
+  back to RX. Tone level 66 (APRS TX's default), no twist.
+- **Screen**: `USB` / `NO USB` / `TX` capsule, frames received and sent, the
+  last station heard with its RSSI, frames lost, the VFO frequency. Keys: 1
+  speaker (saved), 2 test frame to the host (link check without RF), EXIT.
+- **Size**: 3,636 B of the 4,096 B overlay (88 %) + 234 B of assets. No
+  division linked.
+
+Tests (`test/test_tnc.py`, 15 checks, all pass): the app is built for the
+computer against a mock API and mock MCU registers (`test/host_tnc.c`,
+`test/host_hw.h`) and checked with APRS RX's channel model:
+
+- RX: six frames (position, digipeated, message, 200 B, status, bad FCS) through
+  the radio audio path (RAW and STD) at 0, 1500 and 3000 Hz of noise: the C app
+  gives exactly the frames the Python reference decoder finds, never the bad one;
+- TX: the bit stream rebuilt from the tone writes and their timing: 40 flags,
+  the frame plus FCS exactly, 1200 / 2200 Hz only, KISS TXDELAY 30 -> 45 flags;
+- loop: the C modulator's tones, through the channel model, decoded by the C
+  demodulator, give back the host's frame (STD 0 and 1500 Hz noise, RAW).
+
+Four deliberate bugs (bit stuffing, FCS stripping, CRC, space tone) are each
+caught by the test.
+
+### Trying it on the radio
+
+1. Firmware `f4hwn.labs.bin` of this branch (`v6.1.0 KT1`), `KISSTNC.app`
+   v0.2, VFO on 144.800 MHz FM, launch **KISS TNC**.
+2. Receive with the computer first: `python3 test/kiss_host.py --listen 600`
+   prints every frame heard. Then APRSdroid (TNC (KISS), USB serial): the
+   stations appear on its map.
+3. Transmit: APRSdroid "send position", or
+   `python3 test/kiss_host.py --call F4WAT-7 --count 1 --info '>KISS TNC test'`.
+   Check the frame with APRS RX on a second radio, multimon-ng, or aprs.fi.
+   This keys the radio: a free APRS frequency, or a dummy load first.
+
+### Known limits of v0.2
+
+- One frame from the host at a time: a frame arriving while another waits for
+  the channel is dropped (APRSdroid sends one frame per beacon).
+- The channel check is the demodulator's DCD only: a voice carrier is not seen.
+- The USB receive ring holds 256 B: read every 10 ms, plenty for APRSdroid, but
+  a host sending more than ~250 B at once can overrun it.
+- Tone level and twist are fixed (APRS TX defaults); a setting may follow if
+  the deviation needs adjusting.
 
 ## Step 0: USB link test (v0.1)
 
@@ -24,10 +77,8 @@ What is in this branch:
   key 2 sends a test frame `CALL>APZK1:>UV-K1 KISS TNC test` from the
   boot-message callsign. Screen: `USB OK` / `NO HOST` (DTR), bytes in, frames
   in / out, KISS errors, last source callsign and length, last 8 bytes in hex.
-- **Tests**: `test/test_kiss.py` (host build of the app against a mock API,
-  APRSdroid-shaped traffic in odd USB packet sizes: escapes, a 220 B frame,
-  noise, a SETHW command, a bad escape; 5 checks pass), `test/kiss_host.py`
-  (stand-in for APRSdroid on a Mac or Linux PC).
+- **Tests**: a host test of the echo (replaced in v0.2 by `test/test_tnc.py`)
+  and `test/kiss_host.py` (stand-in for APRSdroid on a Mac or Linux PC).
 
 On the radio:
 
@@ -172,7 +223,7 @@ before relying on it outside this fork.
 
 | Step | Content | Check |
 |---|---|---|
-| 0 | Resident `serial_read` / `serial_write` + a tiny **loopback app** (shows the bytes received, echoes them back). **Built, host-tested** | `test/kiss_host.py` on the Mac, then APRSdroid connects (log shows "Opened CDCSerialDevice") |
-| 1 | **RX**: APRS RX demodulator + KISS out | APRSdroid shows stations heard on 144.800 MHz on its map; host test: model frames vs KISS bytes |
-| 2 | **TX**: KISS in + APRS TX modulator, CSMA | APRSdroid beacon decoded by APRS RX on a second radio, multimon-ng, and seen on aprs.fi through a digipeater/iGate |
+| 0 | Resident `serial_read` / `serial_write` + a tiny **loopback app** (shows the bytes received, echoes them back). **Works on the radio with APRSdroid** | `test/kiss_host.py` on the Mac, then APRSdroid connects (log shows "Opened CDCSerialDevice") |
+| 1 | **RX**: APRS RX demodulator + KISS out. **Built, host-tested (v0.2)** | APRSdroid shows stations heard on 144.800 MHz on its map; host test: model frames vs KISS bytes |
+| 2 | **TX**: KISS in + APRS TX modulator, CSMA. **Built, host-tested (v0.2)** | APRSdroid beacon decoded by APRS RX on a second radio, multimon-ng, and seen on aprs.fi through a digipeater/iGate |
 | 3 | KISS parameters, screen, size pass | Overlay size, on-air soak test |
