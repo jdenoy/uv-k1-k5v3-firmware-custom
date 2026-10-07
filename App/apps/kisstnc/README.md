@@ -63,6 +63,12 @@ caught by the test.
   a host sending more than ~250 B at once can overrun it.
 - Tone level and twist are fixed (APRS TX defaults); a setting may follow if
   the deviation needs adjusting.
+- v0.3 adds key 3, **RX only** (capsule `RX ONLY`, not saved): frames from the
+  host are counted as lost, never transmitted. First field report (2026-10-07):
+  APRSdroid drops the link ("KissReader out of data", a USB transfer error) as
+  soon as tracking starts, when it sends its first beacon. Nothing in the TX
+  path touches USB or interrupts, so RF into the USB cable at key-up is the
+  suspect; RX only, then low power and a ferrite on the cable, tell it apart.
 
 ## Step 0: USB link test (v0.1)
 

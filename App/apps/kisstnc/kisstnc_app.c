@@ -39,7 +39,8 @@
  * parameters are accepted and ignored.
  *
  * Keys: 1 speaker on/off (saved) · 2 send a test frame to the host over USB
- * (checks the link without RF) · EXIT quit.
+ * (checks the link without RF) · 3 RX only: frames from the host are dropped,
+ * never transmitted (not saved) · EXIT quit.
  */
 
 #include <stdint.h>
@@ -158,7 +159,7 @@ static struct {
     uint8_t  prevKey, spk, rxn, txFlags, persist;
     uint8_t  slot;                     /* housekeeping slots since the last redraw */
     uint8_t  space, ones;              /* modulator: tone, 1 run (bit stuffing)   */
-    bool     quit, host, txReady, kIn, kEsc, redraw, sending;
+    bool     quit, host, txReady, kIn, kEsc, redraw, sending, rxOnly;
     uint16_t kLen, nRx, nTx, nLost;
     int16_t  rssi;
     uint16_t dupLen;                   /* the last frame accepted: length, FCS, time */
@@ -321,7 +322,7 @@ static void transmit(void){
     uint8_t *f=g.tx+1;                        /* after the KISS command byte */
     uint16_t n=(uint16_t)(g.kLen-1u);
     g.txReady=false; g.kIn=false; g.kLen=0;
-    if(A->tx_state()){ g.nLost++; return; }   /* TX not allowed on this VFO */
+    if(g.rxOnly || A->tx_state()){ g.nLost++; g.redraw=true; return; }   /* RX only, or TX not allowed on this VFO */
     uint16_t c=crc16(f,n);
     f[n]=(uint8_t)c; f[n+1u]=(uint8_t)(c>>8);
     g.sending=true;
@@ -466,6 +467,7 @@ static void draw(void){
     A->status_clear();
     A->print_inverse(T(t,T_TITLE),2,0,true,true,34);
     if(g.sending) A->print_inverse(T(t,T_TX),40,0,true,true,48);
+    else if(g.rxOnly) A->print_inverse(T(t,T_RXONLY),40,0,true,true,72);
     else if(g.host) A->print_inverse(T(t,T_USB),40,0,true,true,52);
     else A->print_inverse(T(t,T_NOUSB),40,0,true,true,64);
     A->draw_battery();
@@ -521,6 +523,7 @@ static void house(bool bz){
         if(key==APP_KEY_EXIT) g.quit=true;
         else if(key==APP_KEY_1){ g.spk^=1u; A->audio_path(g.spk); }
         else if(key==APP_KEY_2) sendTest();
+        else if(key==APP_KEY_3) g.rxOnly=!g.rxOnly;
     }
     g.prevKey=key;
     if(g.quit) return;
