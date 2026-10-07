@@ -69,8 +69,15 @@ static inline volatile uint32_t *hw(uint32_t a){
 #define DAC_SWTRIGR (hw(0x40007400u)[0x04/4])
 #define DAC_DHR12R1 (hw(0x40007400u)[0x08/4])
 #define RCC_APBENR1 (*(volatile uint32_t *)0x4002103Cu)
+/* Interrupts masked while the bits play: nothing may delay a tone switch (a USB
+ * interrupt storm when RF reaches the cable, the 10 ms tick). The bit loop needs
+ * none: SysTick is read as a counter and the BK4829 writes poll it too. */
+#define IRQ_OFF()   __asm__ volatile("cpsid i" ::: "memory")
+#define IRQ_ON()    __asm__ volatile("cpsie i" ::: "memory")
 #else
 #include "host_hw.h"
+#define IRQ_OFF()
+#define IRQ_ON()
 #endif
 #define RCC_DACEN   (1u << 29)
 #define DAC_CR_BIAS ((1u << 0) | (1u << 1) | (1u << 2) | (7u << 3))
@@ -332,6 +339,7 @@ static void transmit(void){
     A->tx_tone(1200);
     g.space=0;
     setTone();
+    IRQ_OFF();
     clkStart();
     g.next=CYC_PER_BIT;
     for(uint8_t i=0;i<g.txFlags;i++) sendByte(0x7E,false);
@@ -339,6 +347,7 @@ static void transmit(void){
     for(uint16_t i=0;i<n+2u;i++) sendByte(f[i],true);
     for(uint8_t i=0;i<TAIL_FLAGS;i++) sendByte(0x7E,false);
     waitCyc(g.next);
+    IRQ_ON();
     A->tx_mute(true);
     A->tx_end();
     A->set_af(APP_AF_FM);                     /* back to listening */
