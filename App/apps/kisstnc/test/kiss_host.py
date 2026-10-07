@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # Stand-in for APRSdroid on a computer: opens the radio's USB serial port,
-# sends KISS data frames as APRSdroid does, and prints every frame the radio
-# sends back, decoded. No dependency (termios), macOS and Linux.
+# prints every frame the KISS TNC app sends (frames heard on the air, and the
+# test frame of key 2), decoded, and optionally sends KISS data frames as
+# APRSdroid does. No dependency (termios), macOS and Linux.
 #
-#   python3 kiss_host.py                     # first /dev/cu.usbmodem* or /dev/ttyACM*
-#   python3 kiss_host.py /dev/cu.usbmodemXXXX --call F4WAT-7 --count 3
+#   python3 kiss_host.py                     # listen only, first /dev/cu.usbmodem* or /dev/ttyACM*
+#   python3 kiss_host.py --listen 600        # listen 10 minutes
+#   python3 kiss_host.py --call F4WAT-7 --count 1 --info '>test'
 #
-# With the KISS TNC app (step 0) running and echo on, each frame sent comes
-# back unchanged; key 2 on the radio sends its test frame, printed here too.
+# --count > 0 TRANSMITS on the radio's VFO: a licensed callsign, a free APRS
+# frequency (144.800 MHz) or a dummy load.
 import argparse, glob, os, select, sys, termios, time
 
 FEND, FESC, TFEND, TFESC = 0xC0, 0xDB, 0xDC, 0xDD
@@ -52,20 +54,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('port', nargs='?')
     ap.add_argument('--call', default='N0CALL')
-    ap.add_argument('--count', type=int, default=1, help='frames to send, 1 s apart')
-    ap.add_argument('--listen', type=float, default=10, help='seconds to listen after the last frame')
+    ap.add_argument('--count', type=int, default=0, help='frames to send (ON AIR), 1 s apart; 0 = listen only')
+    ap.add_argument('--info', default='>kiss_host.py test', help='APRS info field of the frames sent')
+    ap.add_argument('--listen', type=float, default=60, help='seconds to listen after the last frame')
     a = ap.parse_args()
+    if a.count and a.call.upper().startswith('N0CALL'):
+        sys.exit('--count transmits on the air: pass your callsign with --call')
     port = a.port or (sorted(glob.glob('/dev/cu.usbmodem*') + glob.glob('/dev/ttyACM*')) or [None])[0]
     if not port:
         sys.exit('no USB serial port found: plug the radio, then pass the port')
     fd = open_port(port)
     print(f'opened {port}')
     buf, inframe, esc = bytearray(), False, False
-    sent, deadline, next_tx = 0, None, time.time() + 0.5
+    sent, next_tx = 0, time.time() + 0.5
+    deadline = None if a.count else time.time() + a.listen
     while deadline is None or time.time() < deadline:
         if sent < a.count and time.time() >= next_tx:
             sent += 1
-            f = frame(a.call, f'>kiss_host.py test {sent}/{a.count}'.encode())
+            f = frame(a.call, a.info.encode('latin-1'))
             os.write(fd, kiss(f))
             print(f'TX  {decode(f)}')
             next_tx = time.time() + 1
