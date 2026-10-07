@@ -196,12 +196,13 @@ void *memcpy(void *d, const void *s, size_t n) {
 __attribute__((noinline))
 static char *put(char *o,const char *s){ while(*s)*o++=*s++; return o; }
 static unsigned sub(uint32_t *v,uint32_t d){ unsigned q=0; while(*v>=d){ *v-=d; q++; } return q; }
-static const uint32_t P10[]={100000000u,10000000u,1000000u,100000u,10000u,1000u,100u,10u,1u};
 static char *putu(char *o,uint32_t u){
+    uint32_t p10[PLACE_LEN/4u];               /* 10^8 .. 1, from the assets */
+    g.A->asset_read(PLACE,p10,sizeof p10);
     bool lead=false;
-    for(unsigned i=0;i<9u;i++){
-        unsigned c=sub(&u,P10[i]);
-        if(c||lead||i==8u){ *o++=(char)('0'+c); lead=true; }
+    for(unsigned i=0;i<PLACE_LEN/4u;i++){
+        unsigned c=sub(&u,p10[i]);
+        if(c||lead||i==PLACE_LEN/4u-1u){ *o++=(char)('0'+c); lead=true; }
     }
     return o;
 }
@@ -290,6 +291,14 @@ static void kissPoll(void){
     for(uint16_t i=0;i<n;i++) kissByte(buf[i]);
 }
 
+/* CRC-16/X.25 (the AX.25 FCS), one byte: shared by the receiver and the sender. */
+__attribute__((noinline))
+static uint16_t crcByte(uint16_t c,uint8_t v){
+    c^=v;
+    for(uint8_t i=0;i<8u;i++) c=(c&1u)?(uint16_t)((c>>1)^0x8408u):(uint16_t)(c>>1);
+    return c;
+}
+
 /* ---- modulator (APRS TX): NRZI, a 0 changes the tone, from the next bit edge ---- */
 static void setTone(void){
     const app_api_t *A=g.A;
@@ -301,6 +310,7 @@ static void sendBit(uint8_t b){
     if(!b){ g.space^=1u; setTone(); }
     g.next+=CYC_PER_BIT;
 }
+__attribute__((noinline))
 static void sendByte(uint8_t v,bool stuff){
     for(uint8_t i=0;i<8u;i++){
         uint8_t b=(uint8_t)(v&1u);
@@ -313,11 +323,8 @@ static void sendByte(uint8_t v,bool stuff){
     }
 }
 static uint16_t crc16(const uint8_t *f,uint16_t n){
-    uint16_t c=0xFFFFu;                       /* CRC-16/X.25 */
-    for(uint16_t i=0;i<n;i++){
-        c^=f[i];
-        for(uint8_t b=0;b<8u;b++) c=(c&1u)?(uint16_t)((c>>1)^0x8408u):(uint16_t)(c>>1);
-    }
+    uint16_t c=0xFFFFu;
+    for(uint16_t i=0;i<n;i++) c=crcByte(c,f[i]);
     return (uint16_t)~c;
 }
 
@@ -408,9 +415,7 @@ static void hdlcBit(sl_t *m,uint8_t b){
     m->byte|=(uint8_t)(b<<m->nb);
     if(++m->nb==8u){
         if(m->n<FRAME_MAX){
-            uint16_t c=m->crc^m->byte;
-            for(uint8_t i=0;i<8u;i++) c=(c&1u)?(uint16_t)((c>>1)^0x8408u):(uint16_t)(c>>1);
-            m->crc=c;
+            m->crc=crcByte(m->crc,m->byte);
             if(m->n<6u && ((m->byte&1u) || !callChar((uint8_t)(m->byte>>1)))) m->hdr=0;
             m->buf[m->n++]=m->byte;
         } else m->inframe=0;
@@ -418,6 +423,7 @@ static void hdlcBit(sl_t *m,uint8_t b){
     }
 }
 
+__attribute__((noinline))
 static bool busy(const sl_t *m){
     return (m->pre && m->bits<PRE_BITS) || (m->inframe && m->n && m->hdr);
 }
@@ -475,10 +481,11 @@ static void draw(void){
     A->display_clear();
     A->status_clear();
     A->print_inverse(T(t,T_TITLE),2,0,true,true,34);
-    if(g.sending) A->print_inverse(T(t,T_TX),40,0,true,true,48);
-    else if(g.rxOnly) A->print_inverse(T(t,T_RXONLY),40,0,true,true,72);
-    else if(g.host) A->print_inverse(T(t,T_USB),40,0,true,true,52);
-    else A->print_inverse(T(t,T_NOUSB),40,0,true,true,64);
+    /* one capsule: TX, RX ONLY, USB or NO USB, 4 px per character */
+    { uint8_t k=g.sending?0u:g.rxOnly?1u:g.host?2u:3u, w=0;
+      T(t,(uint16_t)(T_CAPS+k*T_CAPS_STRIDE));
+      while(t[w]) w++;
+      A->print_inverse(t,40,0,true,true,(uint8_t)(40u+4u*w)); }
     A->draw_battery();
 
     o=putu(put(s,T(t,T_RX)),g.nRx);
@@ -502,24 +509,20 @@ static void draw(void){
     A->blit_full();
 }
 
-/* ---- a test frame to the host (key 2): checks the USB link without RF ---- */
-static uint8_t *ax25Addr(uint8_t *o,const char *call,bool last){
-    uint8_t i=0;
-    for(; i<6u && call[i]; i++) *o++=(uint8_t)(call[i]<<1);
-    for(; i<6u; i++) *o++=' '<<1;
-    *o++=(uint8_t)(0x60u|(last?1u:0u));
-    return o;
-}
+/* ---- a test frame to the host (key 2): checks the USB link without RF.
+ * The frame is in the assets (APZK1, a blank source, UI, the info field);
+ * only the boot-message callsign is written into the source address. ---- */
 static void sendTest(void){
-    uint8_t f[48];
+    uint8_t f[TESTF_LEN];
     char call[8];
+    g.A->asset_read(TESTF,f,TESTF_LEN);
     g.A->boot_callsign(call,sizeof call);
-    if(!call[0]) put(call,"NOCALL")[0]='\0';
-    uint8_t *o=ax25Addr(f,"APZK1",false);
-    o=ax25Addr(o,call,true);
-    *o++=0x03; *o++=0xF0;
-    o=(uint8_t *)put((char *)o,">UV-K1 KISS TNC test");
-    kissSend(f,(uint16_t)(o-f));
+    if(call[0]){                              /* else NOCALL stays */
+        uint8_t i=0;
+        for(;i<6u && call[i];i++) f[7+i]=(uint8_t)(call[i]<<1);
+        for(;i<6u;i++) f[7+i]=' '<<1;
+    }
+    kissSend(f,TESTF_LEN);
 }
 
 /* ---- housekeeping, between frames: keys, frames to the host, TX, screen ---- */

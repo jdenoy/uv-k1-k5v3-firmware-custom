@@ -27,7 +27,12 @@ static bool s_write(const uint8_t *b, uint16_t len){
     if(len){ printf("OUT"); for(int i = 0; i < len; i++) printf(" %02X", b[i]); printf("\n"); }
     return true;
 }
-static uint8_t key(void){ return iadc > nadc + 9600u * 3u ? APP_KEY_EXIT : APP_KEY_INVALID; }
+static int key2;                             /* press key 2 once, at 0.5 s */
+static const char *callsign = "F4WAT";
+static uint8_t key(void){
+    if(key2 && iadc >= 4800u && iadc < 5400u) return APP_KEY_2;
+    return iadc > nadc + 9600u * 3u ? APP_KEY_EXIT : APP_KEY_INVALID;
+}
 static void bkw(uint8_t r, uint16_t v){ if(r == 0x71) printf("TONE %llu %u\n", (unsigned long long)hc, v); }
 static uint16_t bkr(uint8_t r){ (void)r; return 0; }
 static void txtone(uint16_t hz){ (void)hz; printf("TXSTART %llu\n", (unsigned long long)hc); }
@@ -43,7 +48,7 @@ static uint16_t aread(uint16_t off, void *buf, uint16_t len){
 }
 static void cfgl(uint8_t *b, uint8_t n){ memset(b, 0xFF, n); }
 static void cfgs(const uint8_t *b, uint8_t n){ (void)b; (void)n; }
-static void call(char *b, uint8_t n){ (void)n; strcpy(b, "F4WAT"); }
+static void call(char *b, uint8_t n){ (void)n; strcpy(b, callsign); }
 static void nop(void){} static void nopb(bool b){ (void)b; } static void nop8(uint8_t v){ (void)v; }
 static void dly(uint32_t m){ hc += (uint64_t)m * 48000u; }
 static void pn(const char *s, uint8_t a, uint8_t b, uint8_t l){ (void)s; (void)a; (void)b; (void)l; }
@@ -57,10 +62,10 @@ static void *slurp(const char *p, size_t *n){
     void *b = malloc(*n + 1); *n = fread(b, 1, *n, f); fclose(f); return b;
 }
 int main(int argc, char **argv){
-    (void)argc;
     size_t n; void *a = slurp(argv[1], &n); memcpy(assets, a, n); nassets = n;
     adc = slurp(argv[2], &nadc); nadc /= 2;
     hin = slurp(argv[3], &nhin);
+    if(argc > 4){ key2 = 1; callsign = argv[4]; }   /* key 2 test frame, this callsign */
     static app_api_t api;
     api.display_clear = nop; api.status_clear = nop; api.blit_full = nop; api.blit_status = nop;
     api.get_key = key; api.delay_ms = dly; api.print_normal = pn; api.print_inverse = pi;

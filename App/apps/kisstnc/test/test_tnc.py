@@ -43,11 +43,12 @@ exe = os.path.join(tmp, 'tnc')
 subprocess.run([cc, '-O2', '-Wall', '-Wno-unused-function', '-DENABLE_FEAT_F4HWN_OVERLAY_INFO', '-I', tmp, '-o', exe,
                 os.path.join(tmp, 'host_tnc.c')], check=True)
 
-def run_tnc(adc, host=b''):
+def run_tnc(adc, host=b'', key2_call=None):
     a = os.path.join(tmp, 'adc.bin'); hb = os.path.join(tmp, 'host.bin')
     open(a, 'wb').write(struct.pack('<%dH' % len(adc), *adc))
     open(hb, 'wb').write(host)
-    out = subprocess.run([exe, os.path.join(tmp, 'kisstnc_assets.bin'), a, hb],
+    args = [exe, os.path.join(tmp, 'kisstnc_assets.bin'), a, hb] + ([key2_call] if key2_call is not None else [])
+    out = subprocess.run(args,
                          capture_output=True, text=True, check=True).stdout.splitlines()
     blob = b''.join(bytes(int(x, 16) for x in l.split()[1:]) for l in out if l.startswith('OUT'))
     frames = []
@@ -155,6 +156,15 @@ changes = {(t - t_start) // CYC_PER_BIT - 1 for t, _ in tones[1:]}
 nbits = (tx[1] - t_start) // CYC_PER_BIT
 frames, lead = hdlc_decode([0 if k in changes else 1 for k in range(nbits)])
 check('TX KISS TXDELAY 30 (300 ms) -> 45 flags', lead == 45, 'lead %d' % lead)
+
+# ---- key 2: test frame to the host ---------------------------------------------
+def addr7(call, last):
+    return bytes(ord(c) << 1 for c in call.ljust(6)[:6]) + bytes([0x60 | last])
+for call, shown in (('F4WAT', 'F4WAT'), ('', 'NOCALL'), ('F4ABCDE', 'F4ABCD')):
+    got, _, _ = run_tnc([2048] * 9600, key2_call=call)
+    want = addr7('APZK1', 0) + addr7(shown, 1) + b'\x03\xf0>UV-K1 KISS TNC test'
+    check('key 2 test frame, callsign %-8r -> %s' % (call, shown), got == [want],
+          'got %s' % [g.hex() for g in got])
 
 # ---- LOOP ----------------------------------------------------------------------
 def tones_to_audio(tones, tend, dev=3000.0):

@@ -27,10 +27,14 @@ limits).
 - **Screen**: `USB` / `NO USB` / `TX` capsule, frames received and sent, the
   last station heard with its RSSI, frames lost, the VFO frequency. Keys: 1
   speaker (saved), 2 test frame to the host (link check without RF), EXIT.
-- **Size**: 3,636 B of the 4,096 B overlay (88 %) + 234 B of assets. No
-  division linked.
+- **Size** (v0.5): 3,436 B of the 4,096 B overlay (84 %) + 325 B of assets,
+  660 B free. No division linked. v0.5 saved 240 B with the same behaviour:
+  the key-2 test frame prebuilt in the assets (only the callsign is written:
+  -144 B), one CRC routine for RX and TX, one status capsule from a table,
+  the powers of ten in the assets, `sendByte` / `busy` out of line, and
+  `-fno-jump-tables -fno-move-loop-invariants`.
 
-Tests (`test/test_tnc.py`, 15 checks, all pass): the app is built for the
+Tests (`test/test_tnc.py`, 18 checks, all pass): the app is built for the
 computer against a mock API and mock MCU registers (`test/host_tnc.c`,
 `test/host_hw.h`) and checked with APRS RX's channel model:
 
@@ -40,7 +44,9 @@ computer against a mock API and mock MCU registers (`test/host_tnc.c`,
 - TX: the bit stream rebuilt from the tone writes and their timing: 40 flags,
   the frame plus FCS exactly, 1200 / 2200 Hz only, KISS TXDELAY 30 -> 45 flags;
 - loop: the C modulator's tones, through the channel model, decoded by the C
-  demodulator, give back the host's frame (STD 0 and 1500 Hz noise, RAW).
+  demodulator, give back the host's frame (STD 0 and 1500 Hz noise, RAW);
+- key 2: the test frame for a 5-letter, an empty (NOCALL) and a 7-letter
+  callsign (cut to 6).
 
 Four deliberate bugs (bit stuffing, FCS stripping, CRC, space tone) are each
 caught by the test.
