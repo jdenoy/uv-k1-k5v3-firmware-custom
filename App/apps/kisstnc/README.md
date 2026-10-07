@@ -5,8 +5,10 @@ Goal: send and receive APRS frames on the UV-K1 / UV-K5 v3 from
 application (map, messages, beacons) and the radio acting as the TNC: Bell 202
 AFSK 1200 bauds on air, KISS over the USB-C cable to the phone (USB OTG).
 
-Status: **v0.2, RX and TX built and host-tested, not yet tried on the air**.
-Step 0 (USB link, v0.1) works on the radio with APRSdroid.
+Status: **v0.4 works on the air with APRSdroid** (2026-10-07, UV-K1, OTG
+cable): beacons sent and decoded by another radio, the USB link holds, on
+power L1 to L5 and Medium. On High, RF on the USB cable at key-up makes the
+phone drop the link (see Known limits).
 
 ## v0.2: the TNC
 
@@ -69,6 +71,11 @@ caught by the test.
   soon as tracking starts, when it sends its first beacon. Nothing in the TX
   path touches USB or interrupts, so RF into the USB cable at key-up is the
   suspect; RX only, then low power and a ferrite on the cable, tell it apart.
+- **Confirmed on the air (v0.4)**: L1 to L5 and Medium work (frames decoded,
+  link held); High still drops the phone's USB link. Interrupts are masked while
+  the bits play since v0.4, so the frame itself is safe; the drop is RF on the
+  cable. For High: a ferrite clip on the cable at the radio end, the shortest
+  cable, the antenna away from the phone, or stay on Medium.
 
 ## Step 0: USB link test (v0.1)
 
