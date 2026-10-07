@@ -43,9 +43,10 @@
  *   1  v6.0.0 baseline: every service up to and including beam_draw
  *   2  ticks_ms, rand32, asset_read (+ app_header_t asset_size / asset_crc),
  *      idivmod, uidivmod (the resident division helpers), Labs system info,
- *      current and minimum-since-boot free stack/RAM margin */
+ *      current and minimum-since-boot free stack/RAM margin
+ *   3  serial_read, serial_write (USB serial port, APP_CAP_SERIAL) */
 #define APP_ABI_MAJOR  1u
-#define APP_API_LEVEL  2u
+#define APP_API_LEVEL  3u
 
 /* Minimum API level of an app that ships read-only assets (pack_app.py). */
 #define APP_API_ASSETS 2u
@@ -281,11 +282,28 @@ typedef struct app_api {
     uint32_t (*sys_stack_free_now)(void);
     uint32_t (*sys_stack_free_min)(void);
 #endif
+
+#ifdef ENABLE_FEAT_F4HWN_OVERLAY_INFO
+    /* ---- API level 3: USB serial port (APP_CAP_SERIAL) ----
+     * After the Labs system information, so the offsets are those of every
+     * preset that runs overlay apps (Labs): an app using them builds with
+     * -DENABLE_FEAT_F4HWN_OVERLAY_INFO, as SSTV does.  While an app uses the
+     * port, K5Viewer is paused and the resident command parser does not run;
+     * the loader drops unread bytes when the app returns.
+     * serial_read copies up to len received bytes and returns their count (0
+     * when nothing is waiting).  The receive ring holds 256 bytes: poll it at
+     * least every few ms while a host is sending.
+     * serial_write sends len bytes and waits for the transfer; false when no
+     * host has the port open (DTR clear) or the transfer timed out.  With
+     * len 0 it sends nothing and only reports whether a host has the port open. */
+    uint16_t (*serial_read)(uint8_t *buf, uint16_t len);
+    bool     (*serial_write)(const uint8_t *buf, uint16_t len);
+#endif
 } app_api_t;
 
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_INFO
-_Static_assert(sizeof(app_api_t) == 328u,
-               "Labs system information must add exactly 52 API bytes");
+_Static_assert(sizeof(app_api_t) == 336u,
+               "Labs system information (52 B) and the USB serial port (8 B)");
 #endif
 
 /* BK4819 AF modes for set_af (mirror driver/bk4819.h values). */

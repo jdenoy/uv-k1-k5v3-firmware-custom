@@ -32,6 +32,10 @@ enum
 };
 
 bool UART_IsCommandAvailable(uint32_t Port);
+#if defined(ENABLE_USB) && defined(ENABLE_FEAT_F4HWN_OVERLAY_APPS)
+uint16_t UART_VcpRead(uint8_t *buf, uint16_t len);
+void UART_VcpFlush(void);
+#endif
 void UART_HandleCommand(uint32_t Port);
 void UART_ServiceCommands(void);
 #ifdef ENABLE_AIRCOPY_UART

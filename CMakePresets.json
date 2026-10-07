@@ -185,6 +185,7 @@
             "name": "Labs",
             "inherits": "Fusion",
             "cacheVariables": {
+                "BUILD_TAG": "KT1",
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": true,
                 "ENABLE_FEAT_F4HWN_FOXHUNT": false,
                 "ENABLE_FEAT_F4HWN_BEACON": false,

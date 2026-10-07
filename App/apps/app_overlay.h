@@ -121,6 +121,8 @@
  * the editor and by its target, whose settings cannot be changed without it;
  * earlier firmware refuses both with APP_ERR_CAP. */
 #define APP_CAP_CFG_PROXY     0x00000020u
+/* USB serial port (serial_read / serial_write, API level 3). */
+#define APP_CAP_SERIAL        0x00000040u
 
 /* Aligned RAM objects; app_overlay.c pins every serialized field offset. */
 typedef struct {
