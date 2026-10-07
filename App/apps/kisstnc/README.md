@@ -7,8 +7,9 @@ AFSK 1200 bauds on air, KISS over the USB-C cable to the phone (USB OTG).
 
 Status: **v0.4 works on the air with APRSdroid** (2026-10-07, UV-K1, OTG
 cable): beacons sent and decoded by another radio, the USB link holds, on
-power L1 to L5 and Medium. On High, RF on the USB cable at key-up makes the
-phone drop the link (see Known limits).
+every power level. On High, only with the cable kept away from the antenna:
+near it, RF on the cable at key-up makes the phone drop the link (see Known
+limits).
 
 ## v0.2: the TNC
 
@@ -75,7 +76,8 @@ caught by the test.
   link held); High still drops the phone's USB link. Interrupts are masked while
   the bits play since v0.4, so the frame itself is safe; the drop is RF on the
   cable. For High: a ferrite clip on the cable at the radio end, the shortest
-  cable, the antenna away from the phone, or stay on Medium.
+  cable, the antenna away from the phone, or stay on Medium. Checked on the
+  air: High works with the cable kept away from the antenna.
 
 ## Step 0: USB link test (v0.1)
 
