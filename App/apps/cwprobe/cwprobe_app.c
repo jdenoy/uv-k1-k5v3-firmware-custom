@@ -15,7 +15,10 @@
  *       Pure A1A if gain 0 removes the deviation but not the local tone.
  *   S4  as S3 with the normal tone gain, REG_40 deviation field <11:0> = 0.
  *   S5  as S4, but REG_40 deviation enable bit <12> cleared instead.
+ *   S6  both: REG_40 <12> cleared and <11:0> = 0.
+ *   S7  as S6 with a low tone gain (LOW_GAIN): less residual, sidetone kept?
  *       REG_40 is restored before every return to RX.
+ * Bench 0.2: S4 heard on air, S5 very faint on air with the local tone kept.
  * Bench 0.1: S0/S2 silent locally and on air, S1/S3 heard locally and on
  * air, so REG_50 also mutes the local monitor and gain 0 keeps deviation.
  * In TONE mode the RF tone is always keyed by TX mute; S1..S3 only switch
@@ -37,6 +40,7 @@
 #define DEV_MASK     0x0FFFu
 #define TONE1_EN     0x8000u
 #define TX_GAIN      66u          /* BK4819_TransmitTone's TONE1 tuning gain */
+#define LOW_GAIN     20u
 #define AF_BEEP      3u
 #define RAMP_STEPS   5u           /* 1 ms each: 5 ms rise and fall */
 #define DEBOUNCE     3u           /* equal raw samples, 1 ms apart */
@@ -151,7 +155,7 @@ static void rampTo(bool up)
 static void toneKey(bool on)
 {
     if (!g.carr || g.side <= 1u) { A->tx_mute(!on); return; }   /* TONE, S0, S1 */
-    A->bk_write(REG_70, on ? (uint16_t)(TONE1_EN | ((g.side == 3u ? 0u : TX_GAIN) << 8)) : 0u);
+    A->bk_write(REG_70, on ? (uint16_t)(TONE1_EN | ((g.side == 3u ? 0u : g.side == 7u ? LOW_GAIN : TX_GAIN) << 8)) : 0u);
 }
 
 static void keyOn(void)
@@ -190,7 +194,9 @@ static bool txStart(void)
         if (g.side >= 4u) {             /* deviation off, monitor kept? */
             g.reg40 = A->bk_read(REG_40);
             g.dev = true;
-            A->bk_write(REG_40, g.side == 4u ? (uint16_t)(g.reg40 & ~DEV_MASK) : (uint16_t)(g.reg40 & ~DEV_EN));
+            A->bk_write(REG_40, g.side == 4u ? (uint16_t)(g.reg40 & ~DEV_MASK) :
+                                g.side == 5u ? (uint16_t)(g.reg40 & ~DEV_EN) :
+                                               (uint16_t)(g.reg40 & ~(DEV_EN | DEV_MASK)));
         }
     }
     A->set_af(g.side ? AF_BEEP : APP_AF_MUTE);
@@ -280,7 +286,7 @@ static void keys(uint8_t key)
     switch (key) {
         case APP_KEY_EXIT: g.running = false; return;
         case APP_KEY_1: g.carr = !g.carr; break;
-        case APP_KEY_2: if (++g.side > 5u) g.side = 0; break;
+        case APP_KEY_2: if (++g.side > 7u) g.side = 0; break;
         case APP_KEY_3: g.ramp = !g.ramp; break;
         case APP_KEY_4: if (++g.hang >= sizeof(HANG) / 2u) g.hang = 0; break;
         case APP_KEY_5: if (++g.pitch > 4u) g.pitch = 0; break;

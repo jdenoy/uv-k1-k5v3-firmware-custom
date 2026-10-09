@@ -5,7 +5,7 @@ transmitter as a straight key. Every option the study left open is on a key,
 and the timings it needs are measured on screen. Not meant for upstream: once
 the answers are in, the real app (`cwtrx`) is built from `cwdecode`.
 
-Build: `./compile-app.sh cwprobe` -> `build/Apps/CWProbe.app` (2,332 B, v0.2).
+Build: `./compile-app.sh cwprobe` -> `build/Apps/CWProbe.app` (v0.3).
 
 ## Safety
 
@@ -21,7 +21,7 @@ CARR S1 HARD            mode, sidetone method, keying shape
 HANG 400 TONE 700       hang time (ms), tone pitch (Hz)
 UP 70ms END 30ms        TX set-up time, TX-to-RX time
 SETTLE 120ms            RSSI back within 3 dB of the RX baseline after TX
-MARK 60ms R40 xxxx      last key-down; REG_40 as read (after an S4/S5 over)
+MARK 60ms R40 xxxx      last key-down; REG_40 as read (after an S4 to S7 over)
 BOUNCE 2 3ms            PTT bounces on the last edge, span of the bounce
 RX -121dBm              or TX; TOT / TX DENIED flags
 433.65000               TX frequency
@@ -35,7 +35,7 @@ Times come from the 10 ms system tick: read them as +/- 10 ms.
 |-----|--------|
 | PTT | straight key; TX starts on the first press, ends after the hang time |
 | 1 | mode CARR (carrier keying, A1A) / TONE (carrier up, tone keyed, MCW) |
-| 2 | sidetone method S0 to S5 (below) |
+| 2 | sidetone method S0 to S7 (below) |
 | 3 | keying shape HARD / RAMP (CARR only: PA bias ramped over 5 ms) |
 | 4 | hang time 200 / 400 / 800 / 1500 ms |
 | 5 | tone 500 to 900 Hz |
@@ -55,13 +55,15 @@ HARD, 400 ms, 700 Hz).
 | S3 | AF_BEEP | REG_70 enable, gain 0, TX mute off | pure carrier, if gain 0 kills the deviation only |
 | S4 | AF_BEEP | REG_70 enable, TX mute off, REG_40 deviation <11:0> = 0 | pure carrier, if the monitor sits before the deviation scaler |
 | S5 | AF_BEEP | as S4, REG_40 deviation enable <12> cleared instead | same question, other bit |
+| S6 | AF_BEEP | REG_40 <12> cleared **and** <11:0> = 0 | the S5 residual gone? |
+| S7 | AF_BEEP | as S6, tone gain 20 instead of 66 | lower residual, sidetone still loud enough? |
 
-S4 and S5 restore REG_40 before returning to RX (the firmware never writes
+S4 to S7 restore REG_40 before returning to RX (the firmware never writes
 that register itself, so a leftover would silence every later FM TX). After
-an S4/S5 over, check one normal FM transmission outside the app still has
+an S4 to S7 over, check one normal FM transmission outside the app still has
 audio, to be safe.
 
-In TONE mode the on-air tone is always keyed by TX mute; S1 to S5 only turn
+In TONE mode the on-air tone is always keyed by TX mute; S1 to S7 only turn
 the local AF_BEEP monitor on.
 
 ### Bench results
@@ -78,6 +80,17 @@ v0.1, CARR mode (Johan, 2026-10-09):
 So the TX mute (REG_50) also mutes the local monitor, and REG_70 gain 0
 does not remove the deviation: the local beep is a monitor of the TX audio
 path. v0.2 adds S4/S5 to cut the deviation at the RF side instead.
+
+v0.2, CARR mode (Johan, 2026-10-09):
+
+| | Local | On air |
+|---|---|---|
+| S4 | tone | tone |
+| S5 | tone | very faint |
+
+The deviation enable bit (REG_40 <12>) is the lever: the monitor sits before
+it. v0.3 adds S6 (both REG_40 changes) and S7 (S6 with a low tone gain) to
+remove the residual.
 
 ## Bench protocol
 
