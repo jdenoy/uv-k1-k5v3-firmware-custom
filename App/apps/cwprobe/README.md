@@ -61,6 +61,9 @@ that register itself, so a leftover would silence every later FM TX). After
 an S4/S5 over, check one normal FM transmission outside the app still has
 audio, to be safe.
 
+In TONE mode the on-air tone is always keyed by TX mute; S1 to S5 only turn
+the local AF_BEEP monitor on.
+
 ### Bench results
 
 v0.1, CARR mode (Johan, 2026-10-09):
@@ -75,9 +78,6 @@ v0.1, CARR mode (Johan, 2026-10-09):
 So the TX mute (REG_50) also mutes the local monitor, and REG_70 gain 0
 does not remove the deviation: the local beep is a monitor of the TX audio
 path. v0.2 adds S4/S5 to cut the deviation at the RF side instead.
-
-In TONE mode the on-air tone is always keyed by TX mute; S1 to S3 only turn
-the local AF_BEEP monitor on.
 
 ## Bench protocol
 
