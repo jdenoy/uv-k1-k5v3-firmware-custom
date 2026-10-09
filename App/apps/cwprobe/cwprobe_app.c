@@ -13,6 +13,11 @@
  *       Pure A1A if the speaker still hears the tone.
  *   S3  AF_BEEP, TX mute off, tone keyed by REG_70 with tuning gain 0.
  *       Pure A1A if gain 0 removes the deviation but not the local tone.
+ *   S4  as S3 with the normal tone gain, REG_40 deviation field <11:0> = 0.
+ *   S5  as S4, but REG_40 deviation enable bit <12> cleared instead.
+ *       REG_40 is restored before every return to RX.
+ * Bench 0.1: S0/S2 silent locally and on air, S1/S3 heard locally and on
+ * air, so REG_50 also mutes the local monitor and gain 0 keeps deviation.
  * In TONE mode the RF tone is always keyed by TX mute; S1..S3 only switch
  * the local AF_BEEP monitor on.
  */
@@ -26,7 +31,10 @@
 #endif
 
 #define REG_36       0x36
+#define REG_40       0x40
 #define REG_70       0x70
+#define DEV_EN       0x1000u
+#define DEV_MASK     0x0FFFu
 #define TONE1_EN     0x8000u
 #define TX_GAIN      66u          /* BK4819_TransmitTone's TONE1 tuning gain */
 #define AF_BEEP      3u
@@ -44,10 +52,10 @@ static const uint32_t PLACE[] = { 100000000u, 10000000u, 1000000u, 100000u,
 
 static struct {
     const app_api_t *A;
-    bool     running, carr, ramp, tx, down, raw, tot, denied, hold, settling, dirty;
+    bool     running, carr, ramp, tx, down, raw, tot, denied, hold, settling, dirty, dev;
     uint8_t  side, hang, pitch, stable, prevKey, bounces, bounceWin;
     uint8_t  bias;                 /* REG_36 bias read after tx_set_params */
-    uint16_t reg36;
+    uint16_t reg36, reg40;
     uint16_t setupMs, endMs, settleMs, markMs, bounceMs, bounceSpan;
     int16_t  base16;               /* RX RSSI baseline, dBm x 16 (EMA) */
     int16_t  rssi;
@@ -101,6 +109,10 @@ static void draw(void)
     else { o = putu(o, g.settleMs); o = put(o, "ms"); }
     line(s, o, 3);
     o = putms(s, "MARK ", g.markMs);
+    if (g.reg40) {                      /* REG_40 as read before S4/S5 changed it */
+        o = put(o, "R40 ");
+        for (int8_t sh = 12; sh >= 0; sh -= 4) { uint8_t d = (uint8_t)((g.reg40 >> sh) & 15u); *o++ = (char)(d < 10u ? 48u + d : 55u + d); }
+    }
     line(s, o, 4);
     o = put(s, "BOUNCE "); o = putu(o, g.bounceMs); *o++ = ' '; o = putu(o, g.bounceSpan); o = put(o, "ms");
     line(s, o, 5);
@@ -139,7 +151,7 @@ static void rampTo(bool up)
 static void toneKey(bool on)
 {
     if (!g.carr || g.side <= 1u) { A->tx_mute(!on); return; }   /* TONE, S0, S1 */
-    A->bk_write(REG_70, on ? (uint16_t)(TONE1_EN | ((g.side == 2u ? TX_GAIN : 0u) << 8)) : 0u);
+    A->bk_write(REG_70, on ? (uint16_t)(TONE1_EN | ((g.side == 3u ? 0u : TX_GAIN) << 8)) : 0u);
 }
 
 static void keyOn(void)
@@ -174,7 +186,12 @@ static bool txStart(void)
     A->tx_mute(true);
     if (g.carr && g.side >= 2u) {       /* tone keyed by REG_70 */
         A->bk_write(REG_70, 0);
-        if (g.side == 3u) A->tx_mute(false);
+        if (g.side >= 3u) A->tx_mute(false);
+        if (g.side >= 4u) {             /* deviation off, monitor kept? */
+            g.reg40 = A->bk_read(REG_40);
+            g.dev = true;
+            A->bk_write(REG_40, g.side == 4u ? (uint16_t)(g.reg40 & ~DEV_MASK) : (uint16_t)(g.reg40 & ~DEV_EN));
+        }
     }
     A->set_af(g.side ? AF_BEEP : APP_AF_MUTE);
     A->audio_path(g.side != 0);
@@ -190,6 +207,7 @@ static void txStop(void)
     keyOff();
     A->tx_mute(true);
     A->bk_write(REG_36, g.reg36);
+    if (g.dev) { A->bk_write(REG_40, g.reg40); g.dev = false; }
     const uint32_t t0 = A->ticks_ms();
     A->tx_end();
     A->set_af(APP_AF_MUTE);
@@ -262,7 +280,7 @@ static void keys(uint8_t key)
     switch (key) {
         case APP_KEY_EXIT: g.running = false; return;
         case APP_KEY_1: g.carr = !g.carr; break;
-        case APP_KEY_2: if (++g.side > 3u) g.side = 0; break;
+        case APP_KEY_2: if (++g.side > 5u) g.side = 0; break;
         case APP_KEY_3: g.ramp = !g.ramp; break;
         case APP_KEY_4: if (++g.hang >= sizeof(HANG) / 2u) g.hang = 0; break;
         case APP_KEY_5: if (++g.pitch > 4u) g.pitch = 0; break;
