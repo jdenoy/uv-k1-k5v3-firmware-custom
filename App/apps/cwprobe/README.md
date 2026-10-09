@@ -112,6 +112,11 @@ Turnaround (v0.3, Johan, 2026-10-09): `UP` 80 ms, `END` 0 ms (under one
 `tx_tone()` (`BK4819_TransmitTone`); the real app can skip that call and
 write REG_71/REG_70 itself, leaving the ~15 ms of `tx_set_params()`.
 
+PTT bounce (v0.3, UV-K1, Johan, 2026-10-09): `BOUNCE` stays at 0 over
+repeated slow and fast presses. The probe samples about every 1 ms, so any
+bounce is shorter than that (or filtered on the board). The real app keeps
+the 3 ms stable-read debounce as a cheap safety margin.
+
 ## Bench protocol
 
 Receiver: RTL-SDR with gqrx on the Mac, tuned to the UV-K1 frequency.
@@ -126,9 +131,7 @@ of the gqrx audio (headphones), or a local sidetone passes for RF.
    skirt width and level HARD vs RAMP (a screenshot of each is ideal), and
    whether RAMP sounds softer in CW-U.
 3. **Turnaround.** Done (`UP` 80 ms, `END` under 10 ms, `SETTLE` 580 ms).
-4. **PTT bounce.** Press and release the PTT a dozen times, slowly and fast.
-   Note the worst `BOUNCE` count and span: it sets the debounce of the real
-   app (currently 3 ms of stable reads).
+4. **PTT bounce.** Done (0 on the UV-K1).
 5. **Timing.** Send `PARIS` a few times at your normal speed and decode the
    gqrx audio with multimon-ng (gqrx: UDP audio button, default port 7355,
    48 kHz mono):
@@ -144,5 +147,5 @@ of the gqrx audio (headphones), or a local sidetone passes for RF.
    (dummy load): how many dB remain with the PA gated off, compared with key
    down?
 
-Bring back: HARD vs RAMP screenshots or impression, worst `BOUNCE`, the
+Bring back: HARD vs RAMP screenshots or impression, the
 multimon-ng output for `PARIS`, and the key-up/key-down level difference.

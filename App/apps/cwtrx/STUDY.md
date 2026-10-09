@@ -42,6 +42,8 @@ screen saver is shown (`app_get_key` in `App/apps/app_overlay.c`).
 - The PTT line has no debounce (the keypad matrix has one, the PTT GPIO does
   not). The app needs its own: two equal samples 5 ms apart is enough for a
   mechanical switch and costs 5 ms of latency.
+  Bench (CW Probe 0.3, UV-K1): no bounce seen at 1 ms sampling; a 3 ms
+  stable-read debounce is kept as a margin.
 - `cwdecode` polls keys every 50 ms (`KEY_MS`). That is far too slow for
   keying: at 20 WPM a dot lasts 60 ms. The PTT must be polled in the 10 ms
   sample loop (or faster during TX, see timing below). The other keys can stay
