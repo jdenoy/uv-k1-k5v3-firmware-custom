@@ -10,7 +10,8 @@ frequency, with semi break-in (automatic return to RX after a short hang time).
 
 Feasible with the current overlay ABI (level 2), no resident firmware change
 required for a first version. Two points need a bench test before writing code:
-the sidetone in pure carrier mode and the key clicks of hard PA gating. The
+the sidetone in pure carrier mode (solved on the bench, see Sidetone) and
+the key clicks of hard PA gating. The
 4 KiB budget is the main engineering constraint, not the radio.
 
 ## What already exists
@@ -108,6 +109,14 @@ preference:
    `tx_mute` off. This is the main unknown of the study.
 3. **Fallback:** green LED (`api->led`) plus the on-screen decode of what is
    being sent. Usable for practice, poor for real QSOs.
+
+**Bench result (CW Probe 0.1 to 0.3, 2026-10-09): solved.** The local
+AF_BEEP monitor is taken after the TX mute (REG_50) but before the TX
+deviation enable (REG_40 bit 12). Clearing that bit for the whole over and
+keying the tone with the REG_70 enable bit gives a sidetone that follows the
+keying and nothing on air (IC-705 in FM). REG_40 must be restored before
+`tx_end()`: the firmware never writes it, so a leftover would mute every
+later FM transmission. Details in `../cwprobe/README.md`.
 
 ### Receive
 

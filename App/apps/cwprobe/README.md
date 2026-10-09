@@ -92,6 +92,15 @@ The deviation enable bit (REG_40 <12>) is the lever: the monitor sits before
 it. v0.3 adds S6 (both REG_40 changes) and S7 (S6 with a low tone gain) to
 remove the residual.
 
+v0.3, CARR mode, IC-705 listened without hearing the K5 speaker (Johan,
+2026-10-09): S5, S6 and S7 send nothing on air. The faint S5 tone of the v0.2
+run was the K5 speaker heard acoustically, not RF.
+
+**Retained method: S5.** Clear REG_40 bit 12 (TX deviation enable) for the
+whole over, key the tone with the REG_70 enable bit, TX mute (REG_50) off,
+AF_BEEP to the speaker; restore REG_40 before returning to RX. One register
+bit, pure A1A on air, sidetone that follows the keying.
+
 ## Bench protocol
 
 IC-705 on the same frequency: CW mode (to hear and see the carrier) and FM
