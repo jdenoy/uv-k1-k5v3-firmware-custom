@@ -1,6 +1,6 @@
 # CW transceiver overlay app: feasibility study
 
-Branch: `feature/cw-transceiver`. Status: study only, no code yet.
+Branch: `feature/cw-transceiver`. Bench radio: UV-K1 (V3 board). Status: study only, no code yet.
 
 Goal: one overlay app that sends Morse by keying the transmitter with the PTT
 button (PTT used as a straight key) and decodes received CW on the same
@@ -65,7 +65,7 @@ Sequence proven by `beacon` in CARR mode:
 Two modes, as in `beacon`, selectable by a key and saved:
 
 - **CARR (A1A, true CW):** PA gated. Only a receiver with a BFO (SSB/CW rig)
-  hears a tone; an FM receiver hears noise quieting. Another UV-K5 running this
+  hears a tone; an FM receiver hears noise quieting. Another UV-K1/K5 running this
   app or `cwdecode` decodes it from RSSI.
 - **TONE (MCW, F2A):** carrier stays up during the over, an audio tone (700 Hz
   by default) is keyed with `tx_mute`. Audible on any FM handheld. This is the
@@ -191,7 +191,7 @@ Keypad locked while in TX.
 3. **Sidetone in CARR mode:** see above, the main unknown.
 4. **T/R turnaround:** `RADIO_SetupRegisters` then AGC settling. Defines the
    minimum useful hang time (probably 150 to 200 ms).
-5. **PTT switch bounce and wear:** the K5 PTT is a tactile switch, not a key;
+5. **PTT switch bounce and wear:** the UV-K1 PTT is a tactile switch, not a key;
    sustained keying will wear it. Long term: an external key on the
    accessory jack. To check: whether the jack's PTT reaches the same GPIO as
    the side button (it does on speaker-mics, to confirm on the V3 board).
@@ -204,8 +204,8 @@ Keypad locked while in TX.
    variants, measure clicks and turnaround. Answers risks 1 to 4.
 2. Fork `cwdecode` into `cwtrx`, add the TX state machine and echo decode.
 3. Size with `./compile-app.sh cwtrx`, trim if needed.
-4. Over-the-air test: K5 to RTL-SDR/gqrx (CW-U, multimon-ng decode), then
-   K5 to K5 (TX on one, decode on the other).
+4. Over-the-air test: UV-K1 to RTL-SDR/gqrx (CW-U, multimon-ng decode), then
+   LimeSDR keyed carrier to UV-K1 for the RX side (only one radio on hand).
 5. Phase 2 if room: USB beat-note monitoring.
 
 Naming: directory `cwtrx`, label `CW TRX`, `APP_VER` 0.1 in `build.sh`.

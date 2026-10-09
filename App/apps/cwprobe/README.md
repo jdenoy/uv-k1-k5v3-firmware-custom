@@ -1,5 +1,7 @@
 # CW Probe (bench app, throwaway)
 
+Bench radio: Quansheng UV-K1 (V3 board, same firmware as the UV-K5 V3).
+
 Step 1 of the CW transceiver study (`../cwtrx/STUDY.md`). The PTT keys the
 transmitter as a straight key. Every option the study left open is on a key,
 and the timings it needs are measured on screen. Not meant for upstream: once
@@ -92,9 +94,9 @@ The deviation enable bit (REG_40 <12>) is the lever: the monitor sits before
 it. v0.3 adds S6 (both REG_40 changes) and S7 (S6 with a low tone gain) to
 remove the residual.
 
-v0.3, CARR mode, receiver listened without hearing the K5 speaker (Johan,
+v0.3, CARR mode, receiver listened without hearing the UV-K1 speaker (Johan,
 2026-10-09): S5, S6 and S7 send nothing on air. The faint S5 tone of the v0.2
-run was the K5 speaker heard acoustically, not RF.
+run was the UV-K1 speaker heard acoustically, not RF.
 
 **Retained method: S5.** Clear REG_40 bit 12 (TX deviation enable) for the
 whole over, key the tone with the REG_70 enable bit, TX mute (REG_50) off,
@@ -112,9 +114,9 @@ write REG_71/REG_70 itself, leaving the ~15 ms of `tx_set_params()`.
 
 ## Bench protocol
 
-Receiver: RTL-SDR with gqrx on the Mac, tuned to the K5 frequency.
+Receiver: RTL-SDR with gqrx on the Mac, tuned to the UV-K1 frequency.
 `CW-U` mode (narrow filter, about 700 Hz pitch) to hear and see the carrier,
-`Narrow FM` to hear any tone modulation. Keep the K5 speaker out of earshot
+`Narrow FM` to hear any tone modulation. Keep the UV-K1 speaker out of earshot
 of the gqrx audio (headphones), or a local sidetone passes for RF.
 
 1. **Sidetone.** Done (S5 retained, see the results above).
@@ -138,7 +140,7 @@ of the gqrx audio (headphones), or a local sidetone passes for RF.
 
    A first character that comes out wrong on every over means the set-up
    time eats the first element.
-6. **Leakage.** In CARR between elements, gqrx signal level close to the K5
+6. **Leakage.** In CARR between elements, gqrx signal level close to the UV-K1
    (dummy load): how many dB remain with the PA gated off, compared with key
    down?
 
