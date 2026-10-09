@@ -101,6 +101,15 @@ whole over, key the tone with the REG_70 enable bit, TX mute (REG_50) off,
 AF_BEEP to the speaker; restore REG_40 before returning to RX. One register
 bit, pure A1A on air, sidetone that follows the keying.
 
+Also confirmed: S5 and S7 sidetone loud enough locally (the tone gain can be
+a user setting), and normal FM TX outside the app is intact afterwards
+(REG_40 restore works).
+
+Turnaround (v0.3, Johan, 2026-10-09): `UP` 80 ms, `END` 0 ms (under one
+10 ms tick), `SETTLE` 580 ms. Of the 80 ms, 50 ms is the fixed delay inside
+`tx_tone()` (`BK4819_TransmitTone`); the real app can skip that call and
+write REG_71/REG_70 itself, leaving the ~15 ms of `tx_set_params()`.
+
 ## Bench protocol
 
 IC-705 on the same frequency: CW mode (to hear and see the carrier) and FM

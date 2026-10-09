@@ -87,6 +87,12 @@ Fix: apply every edge through a fixed delay line (for example 20 ms). Every
 mark and space then keeps its exact length, the whole over is simply shifted by
 20 ms. The cost is a small ring buffer of edge times (a few bytes).
 
+**Bench result (CW Probe 0.3):** `UP` 80 ms, of which 50 ms is the delay
+inside `tx_tone()`; skipping it (direct REG_71/REG_70 writes) leaves about
+15 to 30 ms, which the 20 ms delay line absorbs. `END` under 10 ms. RSSI
+`SETTLE` after TX: 580 ms, so the RX decoder must blank about 600 ms after
+`tx_end()`, and the default hang time should be 800 ms (600 ms minimum).
+
 Software time-out: the resident TOT does not run inside the app, so the app
 must cut TX itself (key held longer than, say, 10 s, or total over longer than
 the configured TOT).
