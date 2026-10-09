@@ -120,7 +120,7 @@ preference:
 AF_BEEP monitor is taken after the TX mute (REG_50) but before the TX
 deviation enable (REG_40 bit 12). Clearing that bit for the whole over and
 keying the tone with the REG_70 enable bit gives a sidetone that follows the
-keying and nothing on air (IC-705 in FM). REG_40 must be restored before
+keying and nothing on air (RTL-SDR + gqrx in FM). REG_40 must be restored before
 `tx_end()`: the firmware never writes it, so a leftover would mute every
 later FM transmission. Details in `../cwprobe/README.md`.
 
@@ -182,7 +182,7 @@ Keypad locked while in TX.
 
 1. **Key clicks:** `tx_carrier()` switches the PA enable line with no ramp.
    Hard keying of a 5 W PA spreads clicks over several kHz. To measure with
-   the LimeSDR or the IC-705 waterfall. Mitigation if needed: ramp the PA bias
+   the RTL-SDR in gqrx (or the LimeSDR). Mitigation if needed: ramp the PA bias
    (REG_36) in 3 to 4 steps over about 5 ms around each edge.
 2. **Leakage with PA off:** `beacon` notes that the BK4819 still radiates a
    little with the PA gated. A nearby receiver hears a weak carrier between
@@ -204,7 +204,8 @@ Keypad locked while in TX.
    variants, measure clicks and turnaround. Answers risks 1 to 4.
 2. Fork `cwdecode` into `cwtrx`, add the TX state machine and echo decode.
 3. Size with `./compile-app.sh cwtrx`, trim if needed.
-4. Over-the-air test: K5 to IC-705 (CW mode) and IC-705 to K5, then K5 to K5.
+4. Over-the-air test: K5 to RTL-SDR/gqrx (CW-U, multimon-ng decode), then
+   K5 to K5 (TX on one, decode on the other).
 5. Phase 2 if room: USB beat-note monitoring.
 
 Naming: directory `cwtrx`, label `CW TRX`, `APP_VER` 0.1 in `build.sh`.

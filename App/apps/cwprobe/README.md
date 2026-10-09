@@ -68,7 +68,7 @@ the local AF_BEEP monitor on.
 
 ### Bench results
 
-v0.1, CARR mode (Johan, 2026-10-09):
+v0.1, CARR mode, RTL-SDR + gqrx as receiver (Johan, 2026-10-09):
 
 | | Local | On air |
 |---|---|---|
@@ -92,7 +92,7 @@ The deviation enable bit (REG_40 <12>) is the lever: the monitor sits before
 it. v0.3 adds S6 (both REG_40 changes) and S7 (S6 with a low tone gain) to
 remove the residual.
 
-v0.3, CARR mode, IC-705 listened without hearing the K5 speaker (Johan,
+v0.3, CARR mode, receiver listened without hearing the K5 speaker (Johan,
 2026-10-09): S5, S6 and S7 send nothing on air. The faint S5 tone of the v0.2
 run was the K5 speaker heard acoustically, not RF.
 
@@ -112,30 +112,35 @@ write REG_71/REG_70 itself, leaving the ~15 ms of `tx_set_params()`.
 
 ## Bench protocol
 
-IC-705 on the same frequency: CW mode (to hear and see the carrier) and FM
-mode (to hear any tone modulation). Waterfall at the narrowest span.
+Receiver: RTL-SDR with gqrx on the Mac, tuned to the K5 frequency.
+`CW-U` mode (narrow filter, about 700 Hz pitch) to hear and see the carrier,
+`Narrow FM` to hear any tone modulation. Keep the K5 speaker out of earshot
+of the gqrx audio (headphones), or a local sidetone passes for RF.
 
-1. **Sidetone (the main unknown).** CARR + HARD, for S1, S2, S3: send a few
-   `V`s. For each, note (a) is a sidetone heard in the K5 speaker, does it
-   follow the keying, (b) on the IC-705 in FM: is a 700 Hz tone heard on the
-   carrier. Winning method = sidetone heard and no tone in FM.
-   Then TONE + S1: sidetone heard, follows the keying?
-2. **Key clicks.** CARR, S0, HARD then RAMP: hold a steady series of dots and
-   look at the IC-705 waterfall and the audio around the carrier (clicks are
-   the broadband ticks on each edge). LimeSDR capture if you want numbers:
-   occupied bandwidth HARD vs RAMP. Note whether RAMP sounds softer.
-3. **Turnaround.** Note `UP`, `END`, `SETTLE` over several overs. With the
-   IC-705 sending a steady carrier a few seconds after the K5 releases, check
-   that `SETTLE` stays below the hang time you would like to use.
+1. **Sidetone.** Done (S5 retained, see the results above).
+2. **Key clicks.** CARR, S5, HARD then RAMP: a steady series of dots. In
+   gqrx, FFT and waterfall zoomed to about 20 kHz around the carrier, peak
+   hold on: clicks show as a broad skirt flashing on each edge. Compare the
+   skirt width and level HARD vs RAMP (a screenshot of each is ideal), and
+   whether RAMP sounds softer in CW-U.
+3. **Turnaround.** Done (`UP` 80 ms, `END` under 10 ms, `SETTLE` 580 ms).
 4. **PTT bounce.** Press and release the PTT a dozen times, slowly and fast.
    Note the worst `BOUNCE` count and span: it sets the debounce of the real
    app (currently 3 ms of stable reads).
-5. **Timing.** Send `PARIS` a few times at your normal speed with the IC-705
-   CW decoder on (or the K5's own `MARK` for single dots). The IC-705 decode
-   tells whether the first element of an over comes out shortened.
-6. **Leakage.** In CARR between elements, IC-705 S-meter close to the K5
-   (dummy load): how much carrier remains with the PA gated off?
+5. **Timing.** Send `PARIS` a few times at your normal speed and decode the
+   gqrx audio with multimon-ng (gqrx: UDP audio button, default port 7355,
+   48 kHz mono):
 
-Bring back: the S1/S2/S3 table filled in, HARD vs RAMP impression or
-capture, typical `UP`/`END`/`SETTLE`, worst `BOUNCE`, and whether the IC-705
-decodes the K5 cleanly.
+   ```
+   nc -lu 7355 | sox -t raw -e signed -b 16 -r 48000 -c 1 - \
+     -t raw -e signed -b 16 -r 22050 - | multimon-ng -t raw -a MORSE_CW -
+   ```
+
+   A first character that comes out wrong on every over means the set-up
+   time eats the first element.
+6. **Leakage.** In CARR between elements, gqrx signal level close to the K5
+   (dummy load): how many dB remain with the PA gated off, compared with key
+   down?
+
+Bring back: HARD vs RAMP screenshots or impression, worst `BOUNCE`, the
+multimon-ng output for `PARIS`, and the key-up/key-down level difference.
