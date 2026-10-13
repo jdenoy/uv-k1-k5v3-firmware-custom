@@ -174,7 +174,8 @@ about 300 ms after the carrier appears (the preload).
 
 The Labs preset sets `BUILD_TAG`, appended to the version shown on the welcome
 screen: `ZV1` first ZVEI build, `ZV2` CHIRP window, `SC1` SelCall (ZVEI + CCIR),
-`SC2` SelCall on Armel's `feature_update_v6` (v6.1.0, branch `feature/selcall-v6`).
+`SC2` SelCall on Armel's `feature_update_v6` (v6.1.0, branch `feature/selcall-v6`),
+`SC3` same, smaller.
 It is display only: `VERSION_STRING_2` is compared with the stored version at
 boot, and changing it resets the key/menu locks, `SET_KEY`, display inversion and
 the boot-message lines.
@@ -206,6 +207,29 @@ format: flash cost +1,612 -> **+1,484 bytes** (Labs 116,220 of 120,832, RAM +32 
 - The standards table has no entry for OFF and no digit-table pointer (the type
   gives ZVEI or CCIR).
 - Tried and dropped (larger): a shared non-inlined `RecordIndex`.
+
+## Build SC3: size pass (2026-10-13)
+
+Rebased on `feature_update_v6` at `c4f902e0` (Labs 115,820 bytes without
+SelCall), where SC2 cost +1,480 bytes. Same behaviour and record format, host
+test unchanged: flash cost +1,480 -> **+1,360 bytes** (Labs 117,180 of 120,832),
+RAM unchanged (one flag byte less).
+
+- Code entry and display use the input box helpers: `StrToUL(INPUTBOX_GetAscii())`
+  reads the 5 digits, `INPUTBOX_GetAscii` already shows `-` for the missing
+  ones (-76 B).
+- One `RecordAddr()` gives the record's flash address (0 = none), used by the
+  read and write helpers (-24 B).
+- One selcall test in `RADIO_SendEndOfTransmission` skips the roger and the
+  DTMF end-of-TX together; `app/dtmf.c` is back to the upstream version (-4 B).
+- `gSelCallTx` is one state byte (on air / done / idle) instead of two flags
+  (-8 B).
+- Digits by `% 10` and `/ 10`, no power-of-ten table (-4 B); 24-bit codes
+  through `memcpy` (-4 B).
+- Tried and dropped (larger): reading the record once in `SELCALL_Request`
+  (+44 B, `GetField` inlined twice), one division per digit (+8 B). Not done:
+  removing the `ACTION_SelCall1` / `2` wrappers needs a change to upstream's
+  `ACTION_Execute` for 8 B at best.
 
 To do: the CHIRP driver here derives from the v6.0.0 driver; v6.1.0 extends the
 settings (mixed scan lists, 0xA170-0xA178), so it has to be rebased on Armel's
