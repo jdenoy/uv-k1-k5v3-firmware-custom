@@ -1385,10 +1385,14 @@ void RADIO_SendEndOfTransmission(void)
     #endif
 
 #ifdef ENABLE_FEAT_SELCALL
-    if (!gSelCallTx)
+    if (gSelCallTx)            // a selcall burst replaces the roger and the DTMF PTT-ID
+        BK4819_ExitDTMF_TX(true);
+    else
 #endif
+    {
         BK4819_PlayRoger(Bandwidth);
-    DTMF_SendEndOfTransmission();
+        DTMF_SendEndOfTransmission();
+    }
 
     // send the CTCSS/DCS tail tone - allows the receivers to mute the usual FM squelch tail/crash
     RADIO_SendCssTail();
