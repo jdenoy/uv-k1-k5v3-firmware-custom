@@ -37,7 +37,8 @@ are); German/Austrian fire brigades still alert pagers and sirens with ZVEI
 | Listen | `UP` / `DOWN` | Back to the list |
 | Listen | `EXIT` | Quit, back to the channel |
 
-The list shows the TX frequency on top, then the presets (number, name, code)
+The list shows the TX frequency on top, with the channel's TX tone on the right
+(`CT123.0`, or `D023N` / `D023I` for DCS) when it has one, then the presets (number, name, code)
 with the selected one highlighted and its type at the bottom. The last preset
 used is selected at the next launch.
 

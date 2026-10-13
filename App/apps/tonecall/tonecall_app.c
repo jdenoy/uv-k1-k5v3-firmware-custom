@@ -115,6 +115,34 @@ static bool presetsOk(void){
     return magic==TC_PRESETS_MAGIC;
 }
 
+/* ---- the channel's TX tone ---- */
+/* "CT123.0", "D023N" or "D023I" from the TX VFO (beam_get, Labs builds), in
+ * s; false when the channel has none or the service is absent. */
+static bool txTone(char *s){
+    app_beam_channel_t ch;
+    if(!A->beam_get) return false;
+    A->beam_get(&ch);
+    char *o=s;
+    if(ch.tx_codetype==1u && ch.tx_code<CTCSS_COUNT){          /* CTCSS, Hz x 10 */
+        uint16_t v;
+        A->asset_read((uint16_t)(CTCSS+ch.tx_code*2u),&v,2u);
+        *o++='C'; *o++='T';
+        char *e=putu(o,v);
+        e[1]='\0'; e[0]=e[-1]; e[-1]='.';
+        return true;
+    }
+    if((ch.tx_codetype==2u||ch.tx_codetype==3u) && ch.tx_code<DCS_COUNT){   /* DCS N / I */
+        uint8_t low;
+        A->asset_read((uint16_t)(DCS_LOW+ch.tx_code),&low,1u);
+        const uint16_t v=(uint16_t)(low|(ch.tx_code>=64u?0x100u:0u));
+        *o++='D';
+        *o++=(char)('0'+((v>>6)&7u)); *o++=(char)('0'+((v>>3)&7u)); *o++=(char)('0'+(v&7u));
+        *o++=ch.tx_codetype==2u?'N':'I'; *o='\0';
+        return true;
+    }
+    return false;
+}
+
 /* ---- drawing ---- */
 static void invertLine(uint8_t line){ for(uint8_t x=0;x<128u;x++) A->fb[line][x]^=0xFFu; }
 
@@ -140,7 +168,9 @@ static void chrome(const char *title){
       e[1]='\0';
       for(uint8_t k=0;k<5u;k++,e--) e[0]=e[-1];
       e[0]='.'; }
-    A->print_normal(s,0u,127u,0u);
+    A->print_normal(s,1u,0u,0u);
+    /* the channel's TX tone, when there is one, right-aligned */
+    if(txTone(s)) A->print_normal(s,(uint8_t)(127u-slen(s)*7u),0u,0u);
 }
 
 static void drawList(void){
