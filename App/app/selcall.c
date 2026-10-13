@@ -81,8 +81,8 @@ static uint32_t GetField(const uint8_t *rec, uint8_t field)
 {
     if (field == SELCALL_F_TYPE)
         return rec[0] < SELCALL_TYPE_COUNT ? rec[0] : SELCALL_OFF;
-    const uint8_t *p = &rec[field * 3u - 2u];     /* code 1 at [1..3], code 2 at [4..6] */
-    const uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+    uint32_t v = 0;                               /* little-endian, as the record */
+    memcpy(&v, &rec[field * 3u - 2u], 3);         /* code 1 at [1..3], code 2 at [4..6] */
     return v <= SELCALL_CODE_MAX ? v : SELCALL_CODE_NONE;
 }
 
@@ -102,12 +102,9 @@ void SELCALL_SetField(uint8_t field, int32_t value)
     if (field == SELCALL_F_TYPE) {
         rec[0] = v < SELCALL_TYPE_COUNT ? (uint8_t)v : SELCALL_OFF;
     } else {
-        uint8_t *p = &rec[field * 3u - 2u];
         if (v > SELCALL_CODE_MAX)
             v = 0xFFFFFFu;                       /* erased pattern = no code */
-        p[0] = (uint8_t)v;
-        p[1] = (uint8_t)(v >> 8);
-        p[2] = (uint8_t)(v >> 16);
+        memcpy(&rec[field * 3u - 2u], &v, 3);     /* little-endian, as the record */
     }
     WriteRecord(addr, rec);
 }
