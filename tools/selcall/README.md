@@ -233,6 +233,9 @@ RAM unchanged (one flag byte less).
   (-8 B).
 - Digits by `% 10` and `/ 10`, no power-of-ten table (-4 B); 24-bit codes
   through `memcpy` (-4 B).
+- On air (2026-10-13, UV-K1, build SC3, firmware v6.2.0 SC3): bursts decoded
+  correctly with an RTL-SDR and multimon-ng
+  (`rtl_fm -M fm -s 22050 ... | multimon-ng -t raw -c -a ZVEI1 -a ZVEI2 -a CCIR -`).
 - Tried and dropped (larger): reading the record once in `SELCALL_Request`
   (+44 B, `GetField` inlined twice), one division per digit (+8 B). Not done:
   removing the `ACTION_SelCall1` / `2` wrappers needs a change to upstream's
