@@ -52,25 +52,16 @@ uint16_t SELCALL_ToneMs(uint8_t type)
 
 uint8_t SELCALL_BuildTones(uint8_t type, uint32_t code, uint16_t *freqs)
 {
-    static const uint32_t P10[SELCALL_DIGITS] = { 10000u, 1000u, 100u, 10u, 1u };
-
     if (type == SELCALL_OFF || type >= SELCALL_TYPE_COUNT || code > SELCALL_CODE_MAX)
         return 0;
 
-    const SelCallStd_t *std = &STANDARDS[type - 1];
     const uint16_t *digitHz = type >= SELCALL_CCIR1 ? CCIR_DIGIT_HZ : ZVEI_DIGIT_HZ;
-    uint16_t prev = 0;
-    for (uint8_t i = 0; i < SELCALL_DIGITS; i++) {
-        uint8_t digit = 0;
-        while (code >= P10[i]) {            /* no division: the M0+ has none */
-            code -= P10[i];
-            digit++;
-        }
-        uint16_t f = digitHz[digit];
-        if (f == prev)                      /* same tone twice: send the repeat tone */
-            f = std->repeatHz;
-        freqs[i] = f;
-        prev = f;
+    for (uint8_t i = SELCALL_DIGITS; i-- > 0; ) {   /* last digit first */
+        freqs[i] = digitHz[code % 10u];
+        code /= 10u;
     }
+    for (uint8_t i = 1; i < SELCALL_DIGITS; i++)    /* same tone twice: send the repeat tone */
+        if (freqs[i] == freqs[i - 1])
+            freqs[i] = STANDARDS[type - 1].repeatHz;
     return SELCALL_DIGITS;
 }
