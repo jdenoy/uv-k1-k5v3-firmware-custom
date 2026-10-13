@@ -1463,12 +1463,7 @@ void UI_DisplayMenu(void)
         case MENU_SC_CD1:
         case MENU_SC_CD2:
             if (gIsInSubMenu && gInputBoxIndex > 0)
-            {   // digits typed so far, '-' for the missing ones
-                const char *ascii = INPUTBOX_GetAscii();
-                for (uint8_t i = 0; i < SELCALL_DIGITS; i++)
-                    String[i] = i < gInputBoxIndex ? ascii[i] : '-';
-                String[SELCALL_DIGITS] = 0;
-            }
+                sprintf(String, "%.5s", INPUTBOX_GetAscii());   // '-' for the missing digits
             else if (gSubMenuSelection >= (int32_t)SELCALL_CODE_NONE)
                 strcpy(String, "OFF");
             else

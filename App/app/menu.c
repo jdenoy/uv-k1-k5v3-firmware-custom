@@ -1594,10 +1594,7 @@ static void MENU_Key_0_to_9(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             gRequestDisplayScreen = DISPLAY_MENU;
             return;
         }
-        int32_t code = 0;
-        for (uint8_t i = 0; i < SELCALL_DIGITS; i++)
-            code = code * 10 + gInputBox[i];
-        gSubMenuSelection = code;
+        gSubMenuSelection = StrToUL(INPUTBOX_GetAscii());   // stops at the 6th box, '-'
         gInputBoxIndex    = 0;
         return;
     }
