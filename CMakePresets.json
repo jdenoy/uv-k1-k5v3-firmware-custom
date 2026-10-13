@@ -188,7 +188,6 @@
             "inherits": "Fusion",
             "cacheVariables": {
                 "ENABLE_FEAT_SELCALL": true,
-                "BUILD_TAG": "SC3",
                 "ENABLE_FEAT_F4HWN_RESCUE_OPS": true,
                 "ENABLE_FEAT_F4HWN_FOXHUNT": false,
                 "ENABLE_FEAT_F4HWN_BEACON": false,

@@ -181,11 +181,12 @@ about 300 ms after the carrier appears (the preload).
 
 ## Build identification
 
-The Labs preset sets `BUILD_TAG`, appended to the version shown on the welcome
+The Labs preset used to set `BUILD_TAG`, appended to the version shown on the welcome
 screen: `ZV1` first ZVEI build, `ZV2` CHIRP window, `SC1` SelCall (ZVEI + CCIR),
 `SC2` SelCall on Armel's `feature_update_v6` (v6.1.0, branch `feature/selcall-v6`),
-`SC3` same, smaller.
-It is display only: `VERSION_STRING_2` is compared with the stored version at
+`SC3` same, smaller. Since 2026-10-13 the Labs preset no longer sets a tag:
+the welcome screen shows the plain upstream version (e.g. `v6.2.0`). The tag
+is display only: `VERSION_STRING_2` is compared with the stored version at
 boot, and changing it resets the key/menu locks, `SET_KEY`, display inversion and
 the boot-message lines.
 
