@@ -99,8 +99,12 @@ void SELCALL_Copy(uint16_t fromChannel, uint8_t fromVfo, uint16_t toChannel);
 void SELCALL_EraseAll(void);
 
 /* On-demand transmission. */
-extern bool gSelCallTx;                   /* a selcall burst is on air             */
-extern bool gSelCallEndTx;                /* burst sent: main loop must unkey      */
+enum {
+    SELCALL_TX_IDLE = 0,
+    SELCALL_TX_ON_AIR,                    /* a selcall burst is on air             */
+    SELCALL_TX_DONE                       /* burst sent: main loop must unkey      */
+};
+extern uint8_t gSelCallTx;                /* SELCALL_TX_*, nonzero until unkeyed   */
 extern uint8_t gSelCallPending;           /* tones of the requested burst, 0 = none */
 bool SELCALL_Request(uint8_t which);      /* which = 0 (code 1) or 1 (code 2)      */
 static inline bool SELCALL_Pending(void) { return gSelCallPending != 0; }

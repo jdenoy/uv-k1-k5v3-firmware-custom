@@ -35,8 +35,7 @@
 #define SELCALL_SECTORS      3u
 #define SELCALL_TONE_GAIN    66u         /* TONE1 tuning gain, same as the 1750 Hz tone */
 
-bool gSelCallTx;
-bool gSelCallEndTx;
+uint8_t gSelCallTx;
 uint8_t gSelCallPending;
 
 static uint16_t sPendingTones[SELCALL_DIGITS];
@@ -147,7 +146,7 @@ void SELCALL_Transmit(void)
     const uint8_t count = gSelCallPending;
 
     gSelCallPending = 0;
-    gSelCallTx = true;
+    gSelCallTx = SELCALL_TX_ON_AIR;
 
     /* Carrier and the channel's CTCSS/DCS are already on (RADIO_SetTxParameters):
      * mute the microphone path, let the repeater open, then send the tones. */
@@ -178,5 +177,5 @@ void SELCALL_Transmit(void)
     BK4819_WriteRegister(BK4819_REG_30, 0xC1FE);               /* as BK4819_PlaySingleTone */
     BK4819_ExitTxMute();
 
-    gSelCallEndTx = true;                  /* the main loop unkeys like a PTT release */
+    gSelCallTx = SELCALL_TX_DONE;          /* the main loop unkeys like a PTT release */
 }

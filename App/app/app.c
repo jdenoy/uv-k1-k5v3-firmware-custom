@@ -2888,11 +2888,10 @@ Skip:
     }
 
 #ifdef ENABLE_FEAT_SELCALL
-    if (gSelCallEndTx) {       // selcall burst sent: end the transmission like a PTT release
-        gSelCallEndTx = false;
+    if (gSelCallTx == SELCALL_TX_DONE) {   // burst sent: end the transmission like a PTT release
         if (gCurrentFunction == FUNCTION_TRANSMIT)
-            GENERIC_Key_PTT(false);
-        gSelCallTx = false;
+            GENERIC_Key_PTT(false);    // still nonzero here: no roger, no DTMF PTT-ID
+        gSelCallTx = SELCALL_TX_IDLE;
     }
 #endif
 
