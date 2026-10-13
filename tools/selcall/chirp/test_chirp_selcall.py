@@ -5,7 +5,7 @@ Setup (once):
     python3 -m venv /tmp/chirpvenv && /tmp/chirpvenv/bin/pip install lark pyserial requests yattag suds
 Run:
     /tmp/chirpvenv/bin/python tools/selcall/chirp/test_chirp_selcall.py /tmp/chirpsrc/.. \\
-        tools/selcall/chirp/f4hwn.chirp.v6.0.0-SelCall.py path/to/original/f4hwn.chirp.v6.0.0.py
+        tools/selcall/chirp/f4hwn.chirp.v6.1.0-SelCall.py path/to/original/f4hwn.chirp.v6.1.0.py
 (the first argument is the directory that contains the `chirp` checkout)
 """
 import sys, types, importlib.util
@@ -116,7 +116,7 @@ if specials:
 
 # 9. upload: areas written (fake serial), calibration off
 writes = []
-drv._sayhello = lambda sp: "F4HWN v6.0.0"
+drv._sayhello = lambda sp: "F4HWN v6.1.0"
 drv._writemem = lambda sp, data, addr: writes.append((addr, len(data)))
 drv._resetradio = lambda sp: None
 class FakePort:

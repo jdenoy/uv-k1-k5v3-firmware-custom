@@ -59,7 +59,7 @@ One 8-byte record per channel in each config bank, at physical address
   written by them stay valid.
 
 Physically this area is free in every bank (the bank uses `0x0000-0x886E`,
-`0x9000-0x90E8`, `0xA000-0xA170`). It is exposed to the serial link through the
+`0x9000-0x90E8`, `0xA000-0xA178`). It is exposed to the serial link through the
 EEPROM-compatible map (`driver/eeprom_compat.c`): legacy addresses
 **`0xD000-0xF06F`** map to `0xB000-0xD06F` of the active bank. This is how the
 CHIRP driver below reads and writes it.
@@ -68,7 +68,7 @@ CHIRP driver below reads and writes it.
   channel clears it, a factory reset erases all records.
 - Records are per config bank, like the channels (multiboot).
 - With the original CHIRP driver the area is untouched (it uploads up to
-  `0xA170`); it neither shows nor erases the selcall settings.
+  `0xA178`); it neither shows nor erases the selcall settings.
 
 ## Side-key actions
 
@@ -78,8 +78,11 @@ ZV1/ZV2 builds: same values, keys already assigned keep working.
 
 ## CHIRP driver
 
-`tools/selcall/chirp/f4hwn.chirp.v6.0.0-SelCall.py` is Armel's
-`f4hwn.chirp.v6.0.0.py` (release v6.0.0) with selcall support. Load it in CHIRP
+`tools/selcall/chirp/f4hwn.chirp.v6.1.0-SelCall.py` is Armel's
+`f4hwn.chirp.v6.1.0.py` (release v6.1.0, mixed scan lists included) with
+selcall support. The selcall changes were carried over from the v6.0.0-based
+driver by a three-way merge (base `f4hwn.chirp.v6.0.0.py`); the only overlaps
+were the version string and `PROG_SIZE`, now `0xA178` as in v6.1.0. Load it in CHIRP
 with *File > Load Module*. It appears as **UV-K1 & UV-K5 V3 (F4HWN) SELCALL**,
 next to the original: images saved with it carry that model name.
 
@@ -88,7 +91,8 @@ next to the original: images saved with it carry that model name.
   code 2** (5 digits, or empty for none; anything else is refused).
 - The key-action lists offer **SELCALL 1** and **SELCALL 2** (values 24 and 25).
 - Download reads up to `0xF080` (the selcall window included); upload writes the
-  usual area, the calibration if enabled, then the selcall window.
+  usual area (`0x0000-0xA178`, mixed scan lists included), the calibration if
+  enabled, then the selcall window.
 - Deleting a channel in CHIRP clears its record, as on the radio. Copy and paste
   of a channel carries its selcall settings with the other extras.
 - Images saved with the original driver (smaller) still open: they are padded
@@ -98,13 +102,16 @@ next to the original: images saved with it carry that model name.
   window reads as `0xFF` (off everywhere) and writes are ignored: nothing breaks,
   the settings are just not stored.
 
-Tested against the CHIRP source (kk7ds/chirp, 2026-09-27) with the real `bitwise`
-parser and settings classes: 19 scenarios (old image padding, extras on empty
+Tested against the CHIRP source (kk7ds/chirp `33d2528`, 2026-10-10) with the real
+`bitwise` parser and settings classes: 19 scenarios (old image padding, extras on empty
 and used channels, raw record layout, round trip, clearing, last memory and VFO
 indexes, a CCIR-2 record, delete, validation, key actions, upload areas with
 calibration off, download size) plus cross-compatibility with the original
-driver. The earlier ZVEI-only version was confirmed working in CHIRP with a
-radio (download, settings, channels).
+driver (v6.1.0). Also checked on the v6.1.0-based driver: the mixed scan list
+mask is written (signature `MIX`, version 1) and selcall extras still round-trip
+after a settings write. The earlier ZVEI-only version was confirmed working in
+CHIRP with a radio (download, settings, channels); the v6.1.0-based driver has
+not been tried with a radio yet.
 Scripts: `tools/selcall/chirp/test_chirp_selcall.py` and
 `test_compat_original.py` (setup and usage in their headers).
 
@@ -231,6 +238,6 @@ RAM unchanged (one flag byte less).
   removing the `ACTION_SelCall1` / `2` wrappers needs a change to upstream's
   `ACTION_Execute` for 8 B at best.
 
-To do: the CHIRP driver here derives from the v6.0.0 driver; v6.1.0 extends the
-settings (mixed scan lists, 0xA170-0xA178), so it has to be rebased on Armel's
-v6.1.0 driver before use with this firmware.
+The CHIRP driver is now based on Armel's v6.1.0 driver (see CHIRP driver above).
+The firmware branch is at v6.2.0 upstream; its EEPROM map still ends the settings
+at `0xA178`, so the v6.1.0 layout applies.

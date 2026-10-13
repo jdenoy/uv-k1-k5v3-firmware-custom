@@ -54,7 +54,7 @@ DEBUG_SHOW_OBFUSCATED_COMMANDS = False
 DEBUG_SHOW_MEMORY_ACTIONS = False
 
 # TODO: remove the driver version when it's in mainline chirp 
-DRIVER_VERSION = "Quansheng UV-K1 / UV-K5 V3 driver ver: 2026/08/30 (c) F4HWN v6.0.0 + SelCall ZVEI/CCIR 2026/09/29 (F4WAT)"
+DRIVER_VERSION = "Quansheng UV-K1 / UV-K5 V3 driver ver: 2026/09/28 (c) F4HWN v6.1.0 + SelCall ZVEI/CCIR 2026/10/13 (F4WAT)"
 FIRMWARE_VERSION_UPDATE = "https://github.com/armel/uv-k1-k5v3-firmware-custom/releases"
 CHIRP_DRIVER_VERSION_UPDATE = "https://github.com/armel/uv-k1-k5v3-firmware-custom/releases"
 
@@ -344,6 +344,16 @@ struct {
 
 // --------------------
 
+#seekto 0x00A170;
+struct {
+    u8 mask[3];
+    char signature[3];
+    u8 version;
+    u8 reserved;
+} scanmix;
+
+// --------------------
+
 struct {
     struct {
         #seekto 0x00B000;
@@ -448,6 +458,9 @@ struct {
 FM_CHANNELS_MAX = 48
 MR_CHANNELS_MAX = 1024
 MR_CHANNELS_LIST = 25
+SCAN_LIST_MODE_ALL = MR_CHANNELS_LIST
+SCAN_LIST_MODE_MIX = MR_CHANNELS_LIST + 1
+SCAN_LIST_MIX_MASK_ALL = (1 << (MR_CHANNELS_LIST - 1)) - 1
 
 # flags1
 FLAGS1_OFFSET_NONE = 0b00
@@ -505,7 +518,8 @@ UVK5_POWER_LEVELS = [chirp_common.PowerLevel("USER = < 20mW to 5W", watts=0.000)
 COMPANDER_LIST = ["OFF", "TX", "RX", "TX/RX"]
 
 # rx mode
-RXMODE_LIST = ["MAIN ONLY", "DUAL RX RESPOND", "CROSS BAND", "MAIN TX DUAL RX"]
+RXMODE_LIST = ["MAIN ONLY", "DUAL RX RESPOND", "CROSS BAND", "MAIN TX DUAL RX",
+               "FULL RX RESPOND", "MAIN TX FULL RX"]
 
 # channel display mode
 CHANNELDISP_LIST = ["Frequency (FREQ)", "CHANNEL NUMBER", "NAME", "Name + Frequency (NAME + FREQ)"]
@@ -659,7 +673,7 @@ RTE_LIST = ["OFF", "100ms", "200ms", "300ms", "400ms",
 VOX_LIST = ["OFF", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 
 MEM_SIZE =      0x00B190    # end of the calibration area (was: size of all memory)
-PROG_SIZE =     0x00A171    # size of the memory that we will write (LAST ADDRESS + 1 !!!)
+PROG_SIZE =     0x00A178    # size of the memory that we will write (LAST ADDRESS + 1 !!!)
 SELCALL_START = 0x00D000    # selcall records window (firmware ENABLE_FEAT_SELCALL)
 SELCALL_END =   0x00F080    # 0xD000 + 1038 * 8 = 0xF070, rounded up to MEM_BLOCK
 IMAGE_SIZE =    SELCALL_END # size of a downloaded image
@@ -686,7 +700,12 @@ SCANLIST_LIST = ["OFF"] + [f"List [{i}]" for i in range(1, MR_CHANNELS_LIST)] + 
 
 SCANLIST_SELECT_LIST = (
     [f"LIST [{i}]" for i in range(1, MR_CHANNELS_LIST)]
-    + ["LIST [ALL]"]
+    + ["MIX", "ALL"]
+)
+
+SCANLIST_SELECT_VALUES = (
+    list(range(1, MR_CHANNELS_LIST))
+    + [SCAN_LIST_MODE_MIX, SCAN_LIST_MODE_ALL]
 )
 
 DTMF_CHARS = "0123456789ABCD*# "
@@ -1158,8 +1177,41 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
             else:
                 scanlists.append(SCANLIST_SELECT_LIST[idx])
 
-        scanlists.append("LIST [ALL]")
+        scanlists.extend(["MIX", "ALL"])
         return scanlists
+
+    def _get_scan_mix_mask(self):
+        try:
+            signature = bytes(int(value) for value in
+                              self._memobj.scanmix.signature)
+            version = int(self._memobj.scanmix.version)
+        except (AttributeError, TypeError, ValueError):
+            return SCAN_LIST_MIX_MASK_ALL
+
+        if signature != b"MIX" or version != 1:
+            return SCAN_LIST_MIX_MASK_ALL
+
+        mask = 0
+        for index in range(3):
+            mask |= int(self._memobj.scanmix.mask[index]) << (index * 8)
+
+        return mask if mask else SCAN_LIST_MIX_MASK_ALL
+
+    def _set_scan_mix_mask(self, mask):
+        mask &= SCAN_LIST_MIX_MASK_ALL
+        for index in range(3):
+            self._memobj.scanmix.mask[index] = (mask >> (index * 8)) & 0xFF
+
+        self._memobj.scanmix.signature = b"MIX"
+        self._memobj.scanmix.version = 1
+
+    def _iter_scan_mix_settings(self, settings):
+        for element in settings:
+            if isinstance(element, RadioSetting):
+                if element.get_name().startswith("scanmix_list_"):
+                    yield element
+            else:
+                yield from self._iter_scan_mix_settings(element)
 
     @classmethod
     def get_prompts(cls):
@@ -1412,7 +1464,7 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         tmp_comp = 0
         if ch_num < MR_CHANNELS_MAX:
             _mem3 = self._memobj.ch_attr[ch_num]
-            # scanlists - use new 5-bit scanlist field
+            # Scan list assignment
             tmpscn = _mem3.scanlist
             tmp_comp = list_def(_mem3.compander, COMPANDER_LIST, 0)
         elif ch_num < MR_CHANNELS_MAX + 14:
@@ -1621,6 +1673,25 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
 
     def set_settings(self, settings):
         _mem = self._memobj
+
+        mix_settings = list(self._iter_scan_mix_settings(settings))
+        if mix_settings:
+            mix_mask = self._get_scan_mix_mask()
+            for mix_setting in mix_settings:
+                index = int(mix_setting.get_name().replace("scanmix_list_", ""))
+                bit = 1 << index
+                if int(mix_setting.value):
+                    mix_mask |= bit
+                else:
+                    mix_mask &= ~bit
+
+            if not mix_mask:
+                mix_mask = SCAN_LIST_MIX_MASK_ALL
+                for mix_setting in mix_settings:
+                    mix_setting.value = True
+
+            self._set_scan_mix_mask(mix_mask)
+
         for element in settings:
             if not isinstance(element, RadioSetting):
                 self.set_settings(element)
@@ -1684,8 +1755,12 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
             elif elname == "rx_mode":
                 tmptxmode = int(element.value)
                 tmpmainvfo = _mem.TX_VFO + 1
-                _mem.crossband = tmpmainvfo * bool(tmptxmode & 0b10)
-                _mem.dual_watch = tmpmainvfo * bool(tmptxmode & 0b01)
+                if tmptxmode >= 4:
+                    _mem.dual_watch = 3
+                    _mem.crossband = tmpmainvfo if tmptxmode == 5 else 0
+                else:
+                    _mem.crossband = tmpmainvfo * bool(tmptxmode & 0b10)
+                    _mem.dual_watch = tmpmainvfo * bool(tmptxmode & 0b01)
 
             # Battery Save
             elif elname == "battery_save":
@@ -1966,7 +2041,7 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
 
             # scanlist stuff
             if elname == "slDef":
-                _mem.sl.slDef = int(element.value) + 1
+                _mem.sl.slDef = SCANLIST_SELECT_VALUES[int(element.value)]
 
             elif elname == "slPriorEnab":
                 _mem.sl.slPriorEnab = int(element.value)
@@ -1976,6 +2051,9 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
 
             elif elname == "slPriorCh2":
                 _mem.sl.slPriorCh2 = int(element.value)
+
+            elif elname.startswith("scanmix_list_"):
+                continue
 
             elif elname.startswith("listname"):
                 idx = int(elname.replace("listname", ""))
@@ -2060,6 +2138,7 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         dtmf = RadioSettingGroup("dtmf", "DTMF Settings")
 #        dtmfc = RadioSettingGroup("dtmfc", "DTMF Contacts")
         scanl = RadioSettingGroup("scn", "Scan Lists")
+        scanmix = RadioSettingGroup("scnmix", "Mixed Scan Lists")
         unlock = RadioSettingGroup("unlock", "Unlock Settings")
         fmradio = RadioSettingGroup("fmradio", "FM Broadcast Receiver")
         calibration = RadioSettingGroup("calibration", "Calibration")
@@ -2073,6 +2152,7 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         top.append(keya)
         top.append(dtmf)
         top.append(scanl)
+        top.append(scanmix)
         top.append(unlock)
         top.append(fmradio)
         top.append(roinfo)
@@ -2298,13 +2378,44 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         # ----------------- Scan Lists
 
         scanlist_select_list = self._get_scanlist_select_display_list()
-        tmpscanl = list_def(_mem.sl.slDef - 1, scanlist_select_list, 1)
+        try:
+            tmpscanl = SCANLIST_SELECT_VALUES.index(int(_mem.sl.slDef))
+        except ValueError:
+            tmpscanl = 0
         val = RadioSettingValueList(scanlist_select_list, None, tmpscanl)
         rs = RadioSetting("slDef", "Default Scan Lists (SList)", val)
         rs.set_doc('SList: Selects which lists are used by the memory scan\n' + \
                     '* LIST [1] to LIST [24]\n' + \
+                    '* MIX : Selected combination of scan lists\n' + \
                     '* ALL : All channels (except OFF)\n')
         scanl.append(rs)
+
+        scan_mix_mask = self._get_scan_mix_mask()
+        scan_mix_values = []
+        for i in range(MR_CHANNELS_LIST - 1):
+            name = self._get_scanlist_name(i)
+            label = f"{i + 1:02d}"
+            if name:
+                label += f" ({name[:3]})"
+
+            val = RadioSettingValueBoolean(bool(scan_mix_mask & (1 << i)))
+            scan_mix_values.append(val)
+            rs = RadioSetting(f"scanmix_list_{i}", label, val)
+            rs.set_doc(f'Include scan list {i + 1:02d} in MIX')
+            scanmix.append(rs)
+
+        def validate_scan_mix(requested_value, current_value):
+            if requested_value:
+                return True
+            if any(bool(value) for value in scan_mix_values
+                   if value is not current_value):
+                return False
+            return True
+
+        for value in scan_mix_values:
+            value.set_validate_callback(
+                lambda requested_value, current_value=value:
+                    validate_scan_mix(requested_value, current_value))
 
         val = RadioSettingValueBoolean(_mem.sl.slPriorEnab)
         rs = RadioSetting("slPriorEnab", "Priority Channel Scan", val)
@@ -2697,17 +2808,22 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         vox_setting = RadioSetting("vox", "Voice-Operated Switch (VOX)", val)
         vox_setting.set_doc('VOX: Voice TX activation sensitivity level')
         
-        tmprxmode = list_def((bool(_mem.crossband) << 1)
-                             + bool(_mem.dual_watch),
-                             RXMODE_LIST, 0)
+        if _mem.dual_watch == 3:
+            tmprxmode = 5 if _mem.crossband else 4
+        else:
+            tmprxmode = list_def((bool(_mem.crossband) << 1)
+                                 + bool(_mem.dual_watch),
+                                 RXMODE_LIST, 0)
         val = RadioSettingValueList(RXMODE_LIST, None, tmprxmode)
         rx_mode_setting = RadioSetting("rx_mode", "RX Mode (RX MODE)", val)
         rx_mode_setting.set_doc('RX MODE:\n' + \
-                                '* MAIN ONLY : Transmits and listens on the main frequency\n' + \
+                                '* MAIN ONLY : Transmits and listens on the main frequency (MO)\n' + \
                                 '* DUAL RX RESPOND : Listens both frequencies, if signal received on the secondary frequency, it locks to \n' + \
-                                'it for a couple of seconds so you can respond to the call (DWR)\n' + \
+                                'it for a couple of seconds so you can respond to the call (DR)\n' + \
                                 '* CROSS BAND : Always transmits on the primary and listens on the secondary frequency (XB)\n' + \
-                                '* MAIN TX DUAL RX : Always transmits on the primary, listens to both (DW)')
+                                '* MAIN TX DUAL RX : Always transmits on the primary, listens to both (DW)\n' + \
+                                '* FULL RX RESPOND : Listens to both VFOs and the priority channels, and responds on the received channel (FR)\n' + \
+                                '* MAIN TX FULL RX : Listens to both VFOs and the priority channels, but always transmits on the primary (FW)')
 
         #val = RadioSettingValueBoolean(_mem.freq_mode_allowed)
         #freq_mode_allowed_setting = RadioSetting("freq_mode_allowed", "Frequency Mode Allowed", val)
@@ -3091,9 +3207,11 @@ class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
         append_label(help_group,"(1 2 3) = Scan ALL memories", "On the right side of the VFO"  )
      
         append_label(help_group,"(MO) = Main only, display only one VFO", "Status line" )
-        append_label(help_group,"(DWR) = Dual RX respond", "Status line" )
+        append_label(help_group,"(DR) = Dual RX respond", "Status line" )
         append_label(help_group,"(DW) = Main TX dual RX", "Status line" )
         append_label(help_group,"(XD) = Cross Band", "Status line" )
+        append_label(help_group,"(FR) = Full RX respond", "Status line" )
+        append_label(help_group,"(FW) = Main TX full RX", "Status line" )
         append_label(help_group,"(VX) = VOX active", "Status line" )
         append_label(help_group,"(CL) = PTT classic mode" , "Status line" )
         append_label(help_group,"(OP) = PTT one push mode" , "Status line" )
