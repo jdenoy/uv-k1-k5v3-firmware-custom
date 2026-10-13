@@ -110,8 +110,10 @@ calibration off, download size) plus cross-compatibility with the original
 driver (v6.1.0). Also checked on the v6.1.0-based driver: the mixed scan list
 mask is written (signature `MIX`, version 1) and selcall extras still round-trip
 after a settings write. The earlier ZVEI-only version was confirmed working in
-CHIRP with a radio (download, settings, channels); the v6.1.0-based driver has
-not been tried with a radio yet.
+CHIRP with a radio (download, settings, channels). The v6.1.0-based driver was
+confirmed with a UV-K1 on firmware v6.2.0 SC3 (2026-10-13): the selcall codes
+were configured with it, and every scan mode, mixed scan lists (MIX) included,
+works on the radio.
 Scripts: `tools/selcall/chirp/test_chirp_selcall.py` and
 `test_compat_original.py` (setup and usage in their headers).
 
