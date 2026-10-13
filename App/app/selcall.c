@@ -34,7 +34,6 @@
  * (SELCALL_BASE and the record layout are in selcall.h). */
 #define SELCALL_SECTORS      3u
 #define SELCALL_TONE_GAIN    66u         /* TONE1 tuning gain, same as the 1750 Hz tone */
-#define SELCALL_NO_INDEX     0xFFFFu
 
 bool gSelCallTx;
 bool gSelCallEndTx;
@@ -43,30 +42,38 @@ uint8_t gSelCallPending;
 static uint16_t sPendingTones[SELCALL_DIGITS];
 static uint16_t sPendingToneMs;
 
-static uint16_t RecordIndex(uint16_t channel, uint8_t vfo)
+/* Flash address of a record, 0 for none (NOAA: no transmit anyway). MR
+ * channels first, then two records per band (FREQ_CHANNEL_FIRST is
+ * MR_CHANNELS_MAX, so 1024 + (ch - 1024) * 2 + vfo = ch * 2 - 1024 + vfo). */
+static uint32_t RecordAddr(uint16_t channel, uint8_t vfo)
 {
-    if (IS_MR_CHANNEL(channel))
-        return channel;
-    if (IS_FREQ_CHANNEL(channel))
-        return (uint16_t)(MR_CHANNELS_MAX + (channel - FREQ_CHANNEL_FIRST) * 2u + (vfo & 1u));
-    return SELCALL_NO_INDEX;               /* NOAA: no transmit anyway */
+    uint32_t idx = channel;
+    if (channel > FREQ_CHANNEL_LAST)
+        return 0;
+    if (channel >= FREQ_CHANNEL_FIRST)
+        idx = idx * 2u - FREQ_CHANNEL_FIRST + (vfo & 1u);
+    return SELCALL_BASE + idx * SELCALL_REC_SIZE;
 }
 
-/* Raw 8-byte record. No record (NOAA) reads as erased flash: type off, no code. */
-static void ReadRecord(uint16_t channel, uint8_t vfo, uint8_t *rec)
+/* Record of the current TX channel (menus, transmission). */
+static uint32_t CurrentAddr(void)
 {
-    const uint16_t idx = RecordIndex(channel, vfo);
-    if (idx == SELCALL_NO_INDEX)
-        memset(rec, 0xFF, SELCALL_REC_SIZE);
+    return RecordAddr(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO);
+}
+
+/* Raw 8-byte record. No record reads as erased flash: type off, no code. */
+static void ReadRecord(uint32_t addr, uint8_t *rec)
+{
+    if (addr)
+        PY25Q16_ReadBuffer(addr, rec, SELCALL_REC_SIZE);
     else
-        PY25Q16_ReadBuffer(SELCALL_BASE + (uint32_t)idx * SELCALL_REC_SIZE, rec, SELCALL_REC_SIZE);
+        memset(rec, 0xFF, SELCALL_REC_SIZE);
 }
 
-static void WriteRecord(uint16_t channel, uint8_t vfo, const uint8_t *rec)
+static void WriteRecord(uint32_t addr, const uint8_t *rec)
 {
-    const uint16_t idx = RecordIndex(channel, vfo);
-    if (idx != SELCALL_NO_INDEX)
-        PY25Q16_WriteBuffer(SELCALL_BASE + (uint32_t)idx * SELCALL_REC_SIZE, rec, SELCALL_REC_SIZE, false);
+    if (addr)
+        PY25Q16_WriteBuffer(addr, rec, SELCALL_REC_SIZE, false);
 }
 
 /* Field value from a record: type (invalid -> off) or 24-bit LE code
@@ -83,7 +90,7 @@ static uint32_t GetField(const uint8_t *rec, uint8_t field)
 int32_t SELCALL_GetField(uint8_t field)
 {
     uint8_t rec[SELCALL_REC_SIZE];
-    ReadRecord(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, rec);
+    ReadRecord(CurrentAddr(), rec);
     return (int32_t)GetField(rec, field);
 }
 
@@ -91,7 +98,8 @@ void SELCALL_SetField(uint8_t field, int32_t value)
 {
     uint8_t rec[SELCALL_REC_SIZE];
     uint32_t v = (uint32_t)value;
-    ReadRecord(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, rec);
+    const uint32_t addr = CurrentAddr();
+    ReadRecord(addr, rec);
     if (field == SELCALL_F_TYPE) {
         rec[0] = v < SELCALL_TYPE_COUNT ? (uint8_t)v : SELCALL_OFF;
     } else {
@@ -102,21 +110,21 @@ void SELCALL_SetField(uint8_t field, int32_t value)
         p[1] = (uint8_t)(v >> 8);
         p[2] = (uint8_t)(v >> 16);
     }
-    WriteRecord(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, rec);
+    WriteRecord(addr, rec);
 }
 
 void SELCALL_Clear(uint16_t channel)
 {
     uint8_t rec[SELCALL_REC_SIZE];
     memset(rec, 0xFF, sizeof(rec));               /* erased: type off, no code */
-    WriteRecord(channel, 0, rec);
+    WriteRecord(RecordAddr(channel, 0), rec);
 }
 
 void SELCALL_Copy(uint16_t fromChannel, uint8_t fromVfo, uint16_t toChannel)
 {
     uint8_t rec[SELCALL_REC_SIZE];
-    ReadRecord(fromChannel, fromVfo, rec);
-    WriteRecord(toChannel, 0, rec);
+    ReadRecord(RecordAddr(fromChannel, fromVfo), rec);
+    WriteRecord(RecordAddr(toChannel, 0), rec);
 }
 
 void SELCALL_EraseAll(void)
