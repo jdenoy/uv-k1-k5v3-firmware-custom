@@ -78,9 +78,12 @@ ZV1/ZV2 builds: same values, keys already assigned keep working.
 
 ## CHIRP driver
 
-`tools/selcall/chirp/f4hwn.chirp.v6.1.0-SelCall.py` is Armel's
-`f4hwn.chirp.v6.1.0.py` (release v6.1.0, mixed scan lists included) with
-selcall support. The selcall changes were carried over from the v6.0.0-based
+`tools/selcall/chirp/f4hwn.chirp.v6.2.0-SelCall.py` goes with the v6.2.0
+firmware of this branch. Armel has not released a v6.2.0 driver yet, so it is
+his `f4hwn.chirp.v6.1.0.py` (release v6.1.0, mixed scan lists included) with
+selcall support: the memory layout is the same in v6.2.0 (settings still end at
+`0xA178`; only the RX/TX log moved, to the shared area at `0x018000`, outside
+the config banks). To be rebased on Armel's v6.2.0 driver once released. The selcall changes were carried over from the v6.0.0-based
 driver by a three-way merge (base `f4hwn.chirp.v6.0.0.py`); the only overlaps
 were the version string and `PROG_SIZE`, now `0xA178` as in v6.1.0. Load it in CHIRP
 with *File > Load Module*. It uses the same model name as the original,
@@ -249,6 +252,6 @@ RAM unchanged (one flag byte less).
   removing the `ACTION_SelCall1` / `2` wrappers needs a change to upstream's
   `ACTION_Execute` for 8 B at best.
 
-The CHIRP driver is now based on Armel's v6.1.0 driver (see CHIRP driver above).
+The CHIRP driver (named for v6.2.0) is based on Armel's v6.1.0 driver (see CHIRP driver above).
 The firmware branch is at v6.2.0 upstream; its EEPROM map still ends the settings
 at `0xA178`, so the v6.1.0 layout applies.
