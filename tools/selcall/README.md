@@ -83,8 +83,13 @@ ZV1/ZV2 builds: same values, keys already assigned keep working.
 selcall support. The selcall changes were carried over from the v6.0.0-based
 driver by a three-way merge (base `f4hwn.chirp.v6.0.0.py`); the only overlaps
 were the version string and `PROG_SIZE`, now `0xA178` as in v6.1.0. Load it in CHIRP
-with *File > Load Module*. It appears as **UV-K1 & UV-K5 V3 (F4HWN) SELCALL**,
-next to the original: images saved with it carry that model name.
+with *File > Load Module*. It uses the same model name as the original,
+**UV-K1 & UV-K5 V3 (F4HWN)**, so saved images (`.img`) go both ways: CHIRP opens
+an image only with a driver of the same model name. A loaded module replaces a
+driver of the same name, so the last module loaded is the one in use; the
+driver version line (*About*) ends with `+ SelCall ZVEI/CCIR` for this one.
+Images saved by the earlier SelCall drivers (model `... (F4HWN) SELCALL`) still
+open here through an alias; the original driver refuses those.
 
 - Each channel's **Extra** tab (memories and VFOs) shows **SelCall type**
   (OFF / ZVEI-1 / ZVEI-2 / CCIR-1 / CCIR-2), **SelCall code 1** and **SelCall
@@ -95,9 +100,9 @@ next to the original: images saved with it carry that model name.
   enabled, then the selcall window.
 - Deleting a channel in CHIRP clears its record, as on the radio. Copy and paste
   of a channel carries its selcall settings with the other extras.
-- Images saved with the original driver (smaller) still open: they are padded
-  with `0xFF`, i.e. selcall off. The original driver also opens images saved with
-  this one.
+- Images saved with the original driver (smaller) open here: they are padded
+  with `0xFF`, i.e. selcall off. The original driver opens images saved with this
+  one (the selcall window is ignored).
 - With a firmware without the selcall window (other presets, or build ZV1), the
   window reads as `0xFF` (off everywhere) and writes are ignored: nothing breaks,
   the settings are just not stored.

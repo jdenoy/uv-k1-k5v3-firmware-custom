@@ -1091,11 +1091,22 @@ def f4hwn_set_scn_to_storage(value):
     """Convert the firmware menu index to the inverted stored SetScn bit."""
     return 0 if int(value) else 1
 
+class UVK5SelCallLegacyAlias(chirp_common.Alias):
+    """Model name of the earlier SelCall drivers, so the images they saved
+    still open with this one."""
+    VENDOR = "Quansheng"
+    MODEL = "UV-K1 & UV-K5 V3 (F4HWN) SELCALL"
+
+
 @directory.register
 class UVK5RadioEgzumer(chirp_common.CloneModeRadio):
     """Quansheng UV-K5 (egzumer + f4hwn)"""
     VENDOR = "Quansheng"
-    MODEL = "UV-K1 & UV-K5 V3 (F4HWN) SELCALL"
+    # Same model name as Armel's original driver: CHIRP opens a saved image only
+    # with a driver of the same model name, so images go both ways (the original
+    # driver ignores the selcall window, images without it read as selcall off).
+    MODEL = "UV-K1 & UV-K5 V3 (F4HWN)"
+    ALIASES = [UVK5SelCallLegacyAlias]
     BAUD_RATE = 38400
     NEEDS_COMPAT_SERIAL = False
     FIRMWARE_VERSION = ""
