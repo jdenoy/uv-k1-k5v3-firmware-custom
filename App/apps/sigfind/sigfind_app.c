@@ -192,6 +192,8 @@ static sw_t sw;
 #define A (g.api)
 
 _Static_assert(offsetof(struct globals, histMax) < 32u, "byte fields out of ldrb range");
+_Static_assert(offsetof(struct globals, blHold) - offsetof(struct globals, cfgMagic) == CFG_LEN - 1u,
+               "cfg_load/cfg_save read and write CFG_LEN bytes from cfgMagic");
 
 /* A->asset_read from a single place: its slot is past the reach of a load
  * offset, so each direct call costs more than a call here. */
@@ -470,8 +472,10 @@ static void draw(void){
     putT(puti(str,qdb(g.smQ)),T_DBM)[0]='\0';
     rprint(str,0);
     /* the RX frequency (10 Hz units) as MHz with 3 decimals: every digit but
-       the last two, then the point before the last three (f >= 1 MHz) */
-    { char *e=putu(str,a->rx_freq())-2;
+       the last two, then the point before the last three; 5 digits at least
+       (100 kHz), so the shift never steps before str */
+    { uint32_t f=a->rx_freq(); if(f<10000u) f=10000u;
+      char *e=putu(str,f)-2;
       e[1]='\0';
       for(uint8_t k=0;k<3u;k++,e--) e[0]=e[-1];
       e[0]='.'; }
