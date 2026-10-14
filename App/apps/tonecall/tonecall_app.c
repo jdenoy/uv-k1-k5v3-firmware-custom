@@ -28,8 +28,9 @@
  * channel, where the conversation goes on with the PTT (no code is ever sent
  * with the PTT).
  *
- * Keys: UP/DOWN select · MENU or PTT send · F edit · EXIT quit (from the
- *       listen screen: MENU/PTT sends again, UP/DOWN back to the list).
+ * Keys: UP/DOWN (UV-K1: LEFT/RIGHT) select · MENU or PTT send · F edit ·
+ *       EXIT quit (from the listen screen: MENU/PTT sends again, UP/DOWN
+ *       back to the list).
  * Editor: 0-9 add a digit · F delete · * next type · MENU keep · EXIT discard.
  */
 
