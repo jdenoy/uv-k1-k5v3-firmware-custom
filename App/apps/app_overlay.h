@@ -101,10 +101,18 @@
 #define APP_NAME_LEN      16
 #define APP_VERSION_LEN   16
 
+/* Shortcut IDs, the value of the header's shortcut field (one per app).  The
+ * first four predate the IDs and are single bits; APP_OverlayShortcutMask()
+ * gives each ID the bit of its position, so those keep their own value.  A
+ * firmware that does not know an ID ignores the app's shortcut. */
 #define APP_SHORTCUT_FM       0x01u
 #define APP_SHORTCUT_FOXHUNT  0x02u
 #define APP_SHORTCUT_BEACON   0x04u
 #define APP_SHORTCUT_BEAM     0x08u
+#define APP_SHORTCUT_TONECALL 0x03u
+#define APP_SHORTCUT_COUNT    5u
+/* Bits of APP_OverlayShortcutMask(): 1 << position of the ID. */
+#define APP_SHORTCUT_BIT_TONECALL 0x10u
 
 /* Optional resident facilities an app may require.  Requirements live in the
  * previously reserved header bytes, so app_header_t remains 64 bytes. */

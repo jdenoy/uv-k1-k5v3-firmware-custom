@@ -386,7 +386,8 @@ the receiving radio must be restarted after a successful Flash clone.
   - BEAM,
   - RF Log,
   - Fox Hunt,
-  - Beacon.
+  - Beacon,
+  - ToneCall (launches the ToneCall overlay app, Labs).
 
 ### Reliability and optimization
 

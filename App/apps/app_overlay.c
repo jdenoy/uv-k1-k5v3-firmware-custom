@@ -124,7 +124,7 @@ static struct {
 #endif
     bool shortcuts_cached;
     uint8_t shortcut_mask;
-    uint8_t shortcut_slots[4];
+    uint8_t shortcut_slots[APP_SHORTCUT_COUNT];
     uint8_t slot_revision;
     uint8_t cfg_buf[APP_CONFIG_PROXY_MAX];
 } app_state;
@@ -683,6 +683,7 @@ static int8_t app_shortcut_index(uint8_t shortcut)
     if (shortcut == APP_SHORTCUT_FOXHUNT) return 1;
     if (shortcut == APP_SHORTCUT_BEACON)  return 2;
     if (shortcut == APP_SHORTCUT_BEAM)    return 3;
+    if (shortcut == APP_SHORTCUT_TONECALL) return 4;
     return -1;
 }
 
@@ -703,8 +704,9 @@ static void app_cache_shortcuts(void)
                                            APP_FLAG_SHORTCUT_SHIFT);
         const int8_t index = app_shortcut_index(shortcut);
         if (index >= 0) {
-            if (!(app_state.shortcut_mask & shortcut)) {
-                app_state.shortcut_mask |= shortcut;
+            const uint8_t bit = (uint8_t)(1u << index);
+            if (!(app_state.shortcut_mask & bit)) {
+                app_state.shortcut_mask |= bit;
                 app_state.shortcut_slots[index] = slot;
             }
         }
@@ -726,7 +728,7 @@ uint8_t APP_LaunchOverlayShortcut(uint8_t shortcut)
         return APP_ERR_MAGIC;
 
     app_cache_shortcuts();
-    return (app_state.shortcut_mask & shortcut)
+    return (app_state.shortcut_mask & (1u << index))
          ? APP_LaunchOverlay(app_state.shortcut_slots[index])
          : APP_ERR_MAGIC;
 }

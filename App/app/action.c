@@ -62,6 +62,10 @@
 static void ACTION_Beam(void);
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
+static void ACTION_ToneCall(void);
+#endif
+
 #if defined(ENABLE_FMRADIO_EMBEDDED)
 static void ACTION_Scan_FM(bool bRestart);
 #endif
@@ -129,6 +133,9 @@ void (*const action_opt_table[ACTION_OPT_LEN])(void) = {
 #if defined(ENABLE_FEAT_F4HWN_BEACON) || defined(ENABLE_FEAT_F4HWN_OVERLAY_APPS)
     [ACTION_OPT_BEACON] = &ACTION_Beacon,
 #endif
+#ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
+    [ACTION_OPT_TONECALL] = &ACTION_ToneCall,
+#endif
 };
 
 static_assert(ARRAY_SIZE(action_opt_table) == ACTION_OPT_LEN);
@@ -138,6 +145,7 @@ static_assert(ACTION_OPT_POWER_HIGH == 20);
 static_assert(ACTION_OPT_REMOVE_OFFSET == 21);
 static_assert(ACTION_OPT_FOXHUNT == 22);
 static_assert(ACTION_OPT_BEACON == 23);
+static_assert(ACTION_OPT_TONECALL == 24);
 
 bool ACTION_IsAvailable(uint8_t action)
 {
@@ -162,6 +170,8 @@ bool ACTION_IsAvailable(uint8_t action)
         case ACTION_OPT_BEAM:
             return (APP_OverlayShortcutMask() & APP_SHORTCUT_BEAM) != 0;
 #endif
+        case ACTION_OPT_TONECALL:
+            return (APP_OverlayShortcutMask() & APP_SHORTCUT_BIT_TONECALL) != 0;
         default:
             break;
     }
@@ -507,6 +517,14 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 static void ACTION_Beam(void)
 {
     if (APP_LaunchOverlayShortcut(APP_SHORTCUT_BEAM) != APP_OK)
+        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+}
+#endif
+
+#ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
+static void ACTION_ToneCall(void)
+{
+    if (APP_LaunchOverlayShortcut(APP_SHORTCUT_TONECALL) != APP_OK)
         gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
 }
 #endif

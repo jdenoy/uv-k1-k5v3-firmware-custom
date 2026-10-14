@@ -50,6 +50,7 @@ SHORTCUTS = {
     "foxhunt": cdefine("app_overlay.h", "APP_SHORTCUT_FOXHUNT"),
     "beacon": cdefine("app_overlay.h", "APP_SHORTCUT_BEACON"),
     "beam": cdefine("app_overlay.h", "APP_SHORTCUT_BEAM"),
+    "tonecall": cdefine("app_overlay.h", "APP_SHORTCUT_TONECALL"),
 }
 CAPABILITIES = {
     "fm": cdefine("app_overlay.h", "APP_CAP_FM"),

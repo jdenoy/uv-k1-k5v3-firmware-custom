@@ -11,7 +11,7 @@ The main use is **Canal E**, the Alpine emergency channel (161.300 MHz, simplex,
 ## Using it
 
 1. Tune the channel the call goes on, with its CTCSS/DCS (123 Hz for Canal E).
-2. Open ToneCall (`F` + `7`, pick its slot).
+2. Open ToneCall (`F` + `7`, pick its slot), or with a side key set to `TONE CALL` (see below).
 3. `UP`/`DOWN` (UV-K5 V3) or `LEFT`/`RIGHT` (UV-K1) selects a preset; `MENU` or `PTT` sends it.
 
 The arrow keys follow the radio: `UP` / `DOWN` on the UV-K5 V3, `LEFT` / `RIGHT` on the UV-K1 (the firmware's `SetNav` setting).
@@ -29,6 +29,10 @@ The arrow keys follow the radio: `UP` / `DOWN` on the UV-K5 V3, `LEFT` / `RIGHT`
 The list shows the TX frequency on top, with the channel's TX tone on the right (`CT123.0`, or `D023N` / `D023I` for DCS) when it has one, then the 4 presets (number, type, code) with the selected one highlighted. The last preset used is selected at the next launch.
 
 A call keys up with the channel's normal TX settings (frequency, power, CTCSS/DCS), leaves 300 ms of carrier, sends the tones with no gap and unkeys. The app then stays in RX on the same channel with the speaker following the squelch, so the station's acknowledgement is heard ("RX" while the squelch is open). `TX OFF` means the radio refused to transmit (TX lock, band, battery).
+
+## Launching it from a side key
+
+ToneCall declares a shortcut, like FM, Fox Hunt, Beacon and BEAM: any assignable key action (menu `F1Shrt`, `F1Long`, `F2Shrt`, `F2Long`, `M Long`) can be set to `TONE CALL`, and that key then opens the app directly. The action shows `N/A` in the menu while ToneCall is not installed, and the key gives the double error beep. Requires a firmware that knows the ToneCall shortcut ID; older firmware simply ignores it and the app stays reachable from the Apps menu.
 
 ## Editing a preset
 
