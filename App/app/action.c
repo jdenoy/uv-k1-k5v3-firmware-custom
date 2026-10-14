@@ -153,28 +153,26 @@ bool ACTION_IsAvailable(uint8_t action)
         return false;
 
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
+    /* An action that opens an overlay app is available once the app is
+     * installed: the switch picks its bit in the shortcut mask. */
+    uint8_t bit;
     switch (action) {
 #ifdef ENABLE_FMRADIO
-        case ACTION_OPT_FM:
-            return (APP_OverlayShortcutMask() & APP_SHORTCUT_FM) != 0;
+        case ACTION_OPT_FM:       bit = APP_SHORTCUT_FM;           break;
 #endif
 #ifndef ENABLE_FEAT_F4HWN_FOXHUNT
-        case ACTION_OPT_FOXHUNT:
-            return (APP_OverlayShortcutMask() & APP_SHORTCUT_FOXHUNT) != 0;
+        case ACTION_OPT_FOXHUNT:  bit = APP_SHORTCUT_FOXHUNT;      break;
 #endif
 #ifndef ENABLE_FEAT_F4HWN_BEACON
-        case ACTION_OPT_BEACON:
-            return (APP_OverlayShortcutMask() & APP_SHORTCUT_BEACON) != 0;
+        case ACTION_OPT_BEACON:   bit = APP_SHORTCUT_BEACON;       break;
 #endif
 #ifndef ENABLE_FEAT_F4HWN_BEAM
-        case ACTION_OPT_BEAM:
-            return (APP_OverlayShortcutMask() & APP_SHORTCUT_BEAM) != 0;
+        case ACTION_OPT_BEAM:     bit = APP_SHORTCUT_BEAM;         break;
 #endif
-        case ACTION_OPT_TONECALL:
-            return (APP_OverlayShortcutMask() & APP_SHORTCUT_BIT_TONECALL) != 0;
-        default:
-            break;
+        case ACTION_OPT_TONECALL: bit = APP_SHORTCUT_BIT_TONECALL; break;
+        default:                  return true;
     }
+    return (APP_OverlayShortcutMask() & bit) != 0;
 #endif
 
     return true;
@@ -513,19 +511,26 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     ACTION_Execute(func);
 }
 
+#ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
+/* Open the overlay app holding a shortcut; double beep when none is installed. */
+static void ACTION_LaunchApp(uint8_t shortcut)
+{
+    if (APP_LaunchOverlayShortcut(shortcut) != APP_OK)
+        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+}
+#endif
+
 #if defined(ENABLE_FEAT_F4HWN_OVERLAY_APPS) && !defined(ENABLE_FEAT_F4HWN_BEAM)
 static void ACTION_Beam(void)
 {
-    if (APP_LaunchOverlayShortcut(APP_SHORTCUT_BEAM) != APP_OK)
-        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+    ACTION_LaunchApp(APP_SHORTCUT_BEAM);
 }
 #endif
 
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
 static void ACTION_ToneCall(void)
 {
-    if (APP_LaunchOverlayShortcut(APP_SHORTCUT_TONECALL) != APP_OK)
-        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+    ACTION_LaunchApp(APP_SHORTCUT_TONECALL);
 }
 #endif
 
@@ -536,8 +541,7 @@ void ACTION_FoxHunt(void)
     APP_RunFoxHunt();
     GUI_SelectNextDisplay(DISPLAY_MAIN);
 #else
-    if (APP_LaunchOverlayShortcut(APP_SHORTCUT_FOXHUNT) != APP_OK)
-        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+    ACTION_LaunchApp(APP_SHORTCUT_FOXHUNT);
 #endif
 }
 #endif
@@ -549,8 +553,7 @@ void ACTION_Beacon(void)
     APP_RunBeacon();
     GUI_SelectNextDisplay(DISPLAY_MAIN);
 #else
-    if (APP_LaunchOverlayShortcut(APP_SHORTCUT_BEACON) != APP_OK)
-        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+    ACTION_LaunchApp(APP_SHORTCUT_BEACON);
 #endif
 }
 #endif
@@ -560,8 +563,7 @@ void ACTION_Beacon(void)
 void ACTION_FM(void)
 {
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
-    if (APP_LaunchOverlayShortcut(APP_SHORTCUT_FM) != APP_OK)
-        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+    ACTION_LaunchApp(APP_SHORTCUT_FM);
     return;
 #else
     if (gCurrentFunction != FUNCTION_TRANSMIT && gCurrentFunction != FUNCTION_MONITOR)
