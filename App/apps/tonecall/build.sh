@@ -5,7 +5,7 @@ set -euo pipefail
 
 APP="$(basename "$PWD")"
 APP_NAME="ToneCall"
-APP_VER="0.2"
+APP_VER="0.3"
 APP_API_MIN=2
 APP_VMA=${APP_VMA:-0x20000280}      # pinned overlay VMA (Core/py32f071xb.ld)
 OUT="${APP_NAME// /}"
@@ -29,7 +29,7 @@ step 2 compile ; "$CC" $CFLAGS $LDFLAGS "${APP}_app.c" tonecall_seq.c -lgcc -o "
 step 3 objcopy ; "$OBJCOPY" -O binary "${APP}.elf" "${APP}.bin"
 step 4 pack    ; python3 ../pack_app.py "${APP}.bin" "${OUT}.app" \
                    --name "$APP_NAME" --ver "$APP_VER" --api-min "$APP_API_MIN" --vma "${APP_VMA}" \
-                   --shortcut none --require cfgproxy --assets "${APP}_assets.bin" >/dev/null
+                   --shortcut none --assets "${APP}_assets.bin" >/dev/null
 trap - ERR
 
 BYTES=$(wc -c < "${APP}.bin")

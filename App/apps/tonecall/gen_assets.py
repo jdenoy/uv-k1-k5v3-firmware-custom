@@ -1,23 +1,13 @@
 #!/usr/bin/env python3
-# ToneCall assets: the mutable preset block, edited by ToneCall Edit through
-# the configuration proxy (see ../tonecall_presets.h). It ships empty: no code
-# is built in, the user defines every preset.
+# ToneCall assets: the firmware's CTCSS/DCS tables, to show the channel's TX
+# tone. The presets are not assets: they live in the app's config area
+# (tonecall_seq.h), empty until the user defines them.
 #
 #   ./gen_assets.py tonecall_assets.bin tonecall_assets.h
-import os, struct, sys
+import os, sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from app_assets import Assets, cdefine
-
-MAGIC = cdefine("tonecall_presets.h", "TC_PRESETS_MAGIC")
-COUNT = cdefine("tonecall_presets.h", "TC_PRESET_COUNT")
-REC_LEN = cdefine("tonecall_presets.h", "TC_REC_LEN")
-LEN = cdefine("tonecall_presets.h", "TC_PRESETS_LEN")
-
-empty = b" " * 8 + b"\x00" + b"\x00" * 4          # no name, no digits
-block = struct.pack("<I", MAGIC) + empty * COUNT
-if len(empty) != REC_LEN or len(block) != LEN:
-    sys.exit("preset block layout changed")
+from app_assets import Assets
 
 # The channel's TX tone, shown next to the frequency: the firmware's CTCSS
 # (Hz x 10) and DCS tables, read from App/dcs.c so they cannot drift.
@@ -32,7 +22,6 @@ if len(ctcss) != 50 or len(dcs_low) != 104:
     sys.exit("App/dcs.c tables changed")
 
 a = Assets("TONECALL")
-a.prefix("F_PRESETS", block)
 a.u16("CTCSS", ctcss)
 a.u8("DCS_LOW", dcs_low)     # DCS code = DCS_LOW[i] | 0x100 from index 64
 a.const("CTCSS_COUNT", len(ctcss))
