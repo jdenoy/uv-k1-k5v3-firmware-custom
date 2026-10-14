@@ -678,17 +678,22 @@ void APP_NotifySlotChanged(void)
 }
 
 /* Position of a shortcut ID: its entry in shortcut_slots[] and its bit in
- * shortcut_mask, always < APP_SHORTCUT_COUNT; -1 if unknown.  The first four
- * positions give their IDs' own value. */
-_Static_assert(APP_SHORTCUT_COUNT == APP_SHORTCUT_POS_TONECALL + 1u &&
-               APP_SHORTCUT_COUNT <= 8u, "one shortcut_mask bit per position");
+ * shortcut_mask; -1 if unknown.  Every position goes through SHORTCUT_POS,
+ * which refuses to compile one past APP_SHORTCUT_POS_LAST, so the index is
+ * always < APP_SHORTCUT_COUNT.  The first four positions give their IDs' own
+ * value. */
+_Static_assert(APP_SHORTCUT_COUNT <= 8u, "shortcut_mask holds one bit per position");
+#define SHORTCUT_POS(p) __extension__ ({                                      \
+    _Static_assert((p) <= APP_SHORTCUT_POS_LAST,                              \
+                   "shortcut position past APP_SHORTCUT_POS_LAST");          \
+    (int8_t)(p); })
 static int8_t app_shortcut_index(uint8_t shortcut)
 {
-    if (shortcut == APP_SHORTCUT_FM)       return 0;
-    if (shortcut == APP_SHORTCUT_FOXHUNT)  return 1;
-    if (shortcut == APP_SHORTCUT_BEACON)   return 2;
-    if (shortcut == APP_SHORTCUT_BEAM)     return 3;
-    if (shortcut == APP_SHORTCUT_TONECALL) return APP_SHORTCUT_POS_TONECALL;
+    if (shortcut == APP_SHORTCUT_FM)       return SHORTCUT_POS(0);
+    if (shortcut == APP_SHORTCUT_FOXHUNT)  return SHORTCUT_POS(1);
+    if (shortcut == APP_SHORTCUT_BEACON)   return SHORTCUT_POS(2);
+    if (shortcut == APP_SHORTCUT_BEAM)     return SHORTCUT_POS(3);
+    if (shortcut == APP_SHORTCUT_TONECALL) return SHORTCUT_POS(APP_SHORTCUT_POS_TONECALL);
     return -1;
 }
 

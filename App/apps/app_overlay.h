@@ -110,9 +110,12 @@
 #define APP_SHORTCUT_BEACON   0x04u
 #define APP_SHORTCUT_BEAM     0x08u
 #define APP_SHORTCUT_TONECALL 0x03u
-#define APP_SHORTCUT_COUNT    5u      /* IDs known, <= 8 (bits of the mask)   */
-/* Bit of APP_OverlayShortcutMask(): 1 << position in app_shortcut_ids[]. */
+/* Position of each ID (app_shortcut_index): its slot and its bit, 1 << position,
+ * in APP_OverlayShortcutMask().  FM, Fox Hunt, Beacon and BEAM are 0..3.  A new
+ * shortcut takes the next position and becomes APP_SHORTCUT_POS_LAST. */
 #define APP_SHORTCUT_POS_TONECALL 4u
+#define APP_SHORTCUT_POS_LAST     APP_SHORTCUT_POS_TONECALL
+#define APP_SHORTCUT_COUNT        (APP_SHORTCUT_POS_LAST + 1u)   /* <= 8 */
 #define APP_SHORTCUT_BIT_TONECALL (1u << APP_SHORTCUT_POS_TONECALL)
 
 /* Optional resident facilities an app may require.  Requirements live in the
