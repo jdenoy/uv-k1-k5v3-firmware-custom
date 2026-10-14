@@ -101,22 +101,14 @@
 #define APP_NAME_LEN      16
 #define APP_VERSION_LEN   16
 
-/* Shortcut IDs, the value of the header's shortcut field (one per app).  The
- * first four predate the IDs and are single bits; APP_OverlayShortcutMask()
- * gives each ID the bit of its position, so those keep their own value.  A
- * firmware that does not know an ID ignores the app's shortcut. */
+/* Shortcut IDs: the value of the header's shortcut field, one per app (the
+ * first four predate the IDs, hence their single-bit values).  A firmware that
+ * does not know an ID ignores the app's shortcut. */
 #define APP_SHORTCUT_FM       0x01u
 #define APP_SHORTCUT_FOXHUNT  0x02u
 #define APP_SHORTCUT_BEACON   0x04u
 #define APP_SHORTCUT_BEAM     0x08u
 #define APP_SHORTCUT_TONECALL 0x03u
-/* Position of each ID (app_shortcut_index): its slot and its bit, 1 << position,
- * in APP_OverlayShortcutMask().  FM, Fox Hunt, Beacon and BEAM are 0..3.  A new
- * shortcut takes the next position and becomes APP_SHORTCUT_POS_LAST. */
-#define APP_SHORTCUT_POS_TONECALL 4u
-#define APP_SHORTCUT_POS_LAST     APP_SHORTCUT_POS_TONECALL
-#define APP_SHORTCUT_COUNT        (APP_SHORTCUT_POS_LAST + 1u)   /* <= 8 */
-#define APP_SHORTCUT_BIT_TONECALL (1u << APP_SHORTCUT_POS_TONECALL)
 
 /* Optional resident facilities an app may require.  Requirements live in the
  * previously reserved header bytes, so app_header_t remains 64 bytes. */
@@ -176,7 +168,7 @@ uint8_t APP_LaunchOverlay(uint8_t slot);
 uint8_t APP_LaunchOverlayShortcut(uint8_t shortcut);
 
 /* Cached availability of apps exposed as resident quick actions. */
-uint8_t APP_OverlayShortcutMask(void);
+bool    APP_OverlayShortcutInstalled(uint8_t shortcut);  /* an app holds this shortcut ID */
 
 /* Host-tool slot management (external flash only, never brick-critical). */
 uint8_t APP_SlotInfo(uint8_t slot, app_header_t *out_header);

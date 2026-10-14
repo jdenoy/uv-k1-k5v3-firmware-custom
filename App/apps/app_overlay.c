@@ -102,6 +102,8 @@ enum {
 
 /* Keep the small zero-initialized state together so callbacks can address it
  * from one base. The nonzero RNG seed stays separate to keep this in .bss. */
+#define APP_SHORTCUT_COUNT 5u   /* positions used by app_shortcut_index() */
+
 static struct {
     uint16_t asset_size;
     uint16_t cfg_target_offset;
@@ -123,8 +125,7 @@ static struct {
     bool beam_dirty;
 #endif
     bool shortcuts_cached;
-    uint8_t shortcut_mask;
-    uint8_t shortcut_slots[APP_SHORTCUT_COUNT];
+    uint8_t shortcut_slots[APP_SHORTCUT_COUNT];   /* per position, 0xFF = none */
     uint8_t slot_revision;
     uint8_t cfg_buf[APP_CONFIG_PROXY_MAX];
 } app_state;
@@ -677,15 +678,13 @@ void APP_NotifySlotChanged(void)
     app_state.slot_revision++;
 }
 
-/* Position of a shortcut ID: its entry in shortcut_slots[] and its bit in
- * shortcut_mask; -1 if unknown.  Every position goes through SHORTCUT_POS,
- * which refuses to compile one past APP_SHORTCUT_POS_LAST, so the index is
- * always < APP_SHORTCUT_COUNT.  The first four positions give their IDs' own
- * value. */
-_Static_assert(APP_SHORTCUT_COUNT <= 8u, "shortcut_mask holds one bit per position");
+/* Position of a shortcut ID in shortcut_slots[], -1 if unknown.  Every
+ * position goes through SHORTCUT_POS, which refuses to compile one that is not
+ * below APP_SHORTCUT_COUNT: a new shortcut takes the next position and raises
+ * the count. */
 #define SHORTCUT_POS(p) __extension__ ({                                      \
-    _Static_assert((p) <= APP_SHORTCUT_POS_LAST,                              \
-                   "shortcut position past APP_SHORTCUT_POS_LAST");          \
+    _Static_assert((p) < APP_SHORTCUT_COUNT,                                  \
+                   "shortcut position not below APP_SHORTCUT_COUNT");        \
     (int8_t)(p); })
 static int8_t app_shortcut_index(uint8_t shortcut)
 {
@@ -693,16 +692,17 @@ static int8_t app_shortcut_index(uint8_t shortcut)
     if (shortcut == APP_SHORTCUT_FOXHUNT)  return SHORTCUT_POS(1);
     if (shortcut == APP_SHORTCUT_BEACON)   return SHORTCUT_POS(2);
     if (shortcut == APP_SHORTCUT_BEAM)     return SHORTCUT_POS(3);
-    if (shortcut == APP_SHORTCUT_TONECALL) return SHORTCUT_POS(APP_SHORTCUT_POS_TONECALL);
+    if (shortcut == APP_SHORTCUT_TONECALL) return SHORTCUT_POS(4);
     return -1;
 }
+_Static_assert(APP_SLOT_COUNT < 0xFFu, "0xFF marks a shortcut no app holds");
 
 static void app_cache_shortcuts(void)
 {
     if (app_state.shortcuts_cached)
         return;
 
-    app_state.shortcut_mask = 0;
+    memset(app_state.shortcut_slots, 0xFF, sizeof(app_state.shortcut_slots));
     const uint32_t overlay_vma = (uint32_t)PY25Q16_OverlayBuffer();
 
     for (uint8_t slot = 0; slot < APP_SLOT_COUNT; slot++) {
@@ -713,34 +713,32 @@ static void app_cache_shortcuts(void)
         const uint8_t shortcut = (uint8_t)((h.flags & APP_FLAG_SHORTCUT_MASK) >>
                                            APP_FLAG_SHORTCUT_SHIFT);
         const int8_t index = app_shortcut_index(shortcut);
-        if (index >= 0) {
-            const uint8_t bit = (uint8_t)(1u << index);
-            if (!(app_state.shortcut_mask & bit)) {
-                app_state.shortcut_mask |= bit;
-                app_state.shortcut_slots[index] = slot;
-            }
-        }
+        if (index >= 0 && app_state.shortcut_slots[index] == 0xFFu)
+            app_state.shortcut_slots[index] = slot;   /* the first app wins */
     }
 
     app_state.shortcuts_cached = true;
 }
 
-uint8_t APP_OverlayShortcutMask(void)
+/* Slot of the app holding a shortcut ID, 0xFF if none. */
+static uint8_t app_shortcut_slot(uint8_t shortcut)
 {
+    const int8_t index = app_shortcut_index(shortcut);
+    if (index < 0)
+        return 0xFFu;
     app_cache_shortcuts();
-    return app_state.shortcut_mask;
+    return app_state.shortcut_slots[index];
+}
+
+bool APP_OverlayShortcutInstalled(uint8_t shortcut)
+{
+    return app_shortcut_slot(shortcut) != 0xFFu;
 }
 
 uint8_t APP_LaunchOverlayShortcut(uint8_t shortcut)
 {
-    const int8_t index = app_shortcut_index(shortcut);
-    if (index < 0)
-        return APP_ERR_MAGIC;
-
-    app_cache_shortcuts();
-    return (app_state.shortcut_mask & (1u << index))
-         ? APP_LaunchOverlay(app_state.shortcut_slots[index])
-         : APP_ERR_MAGIC;
+    const uint8_t slot = app_shortcut_slot(shortcut);
+    return slot != 0xFFu ? APP_LaunchOverlay(slot) : APP_ERR_MAGIC;
 }
 
 uint8_t APP_SlotInfo(uint8_t slot, app_header_t *out_header)

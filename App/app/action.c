@@ -153,26 +153,26 @@ bool ACTION_IsAvailable(uint8_t action)
         return false;
 
 #ifdef ENABLE_FEAT_F4HWN_OVERLAY_APPS
-    /* An action that opens an overlay app is available once the app is
-     * installed: the switch picks its bit in the shortcut mask. */
-    uint8_t bit;
+    /* An action that opens an overlay app is available once an app holds
+     * its shortcut: the switch picks the shortcut ID. */
+    uint8_t shortcut;
     switch (action) {
 #ifdef ENABLE_FMRADIO
-        case ACTION_OPT_FM:       bit = APP_SHORTCUT_FM;           break;
+        case ACTION_OPT_FM:       shortcut = APP_SHORTCUT_FM;       break;
 #endif
 #ifndef ENABLE_FEAT_F4HWN_FOXHUNT
-        case ACTION_OPT_FOXHUNT:  bit = APP_SHORTCUT_FOXHUNT;      break;
+        case ACTION_OPT_FOXHUNT:  shortcut = APP_SHORTCUT_FOXHUNT;  break;
 #endif
 #ifndef ENABLE_FEAT_F4HWN_BEACON
-        case ACTION_OPT_BEACON:   bit = APP_SHORTCUT_BEACON;       break;
+        case ACTION_OPT_BEACON:   shortcut = APP_SHORTCUT_BEACON;   break;
 #endif
 #ifndef ENABLE_FEAT_F4HWN_BEAM
-        case ACTION_OPT_BEAM:     bit = APP_SHORTCUT_BEAM;         break;
+        case ACTION_OPT_BEAM:     shortcut = APP_SHORTCUT_BEAM;     break;
 #endif
-        case ACTION_OPT_TONECALL: bit = APP_SHORTCUT_BIT_TONECALL; break;
+        case ACTION_OPT_TONECALL: shortcut = APP_SHORTCUT_TONECALL; break;
         default:                  return true;
     }
-    return (APP_OverlayShortcutMask() & bit) != 0;
+    return APP_OverlayShortcutInstalled(shortcut);
 #endif
 
     return true;
