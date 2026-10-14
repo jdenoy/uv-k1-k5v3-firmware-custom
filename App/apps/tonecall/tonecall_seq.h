@@ -47,6 +47,10 @@ enum {
 #define TC_CFG_MAGIC    0x1C5u    /* 10 bits                                */
 #define TC_CODE_SPACE   111111110u /* codes of 1 to 8 digits: 10 + ... + 10^8 */
 
+/* 10^0 .. 10^8: preset packing, and the app's number printing. */
+#define TC_POW10_COUNT  (TC_MAX_DIGITS + 1u)
+extern const uint32_t tcPow10[TC_POW10_COUNT];
+
 /* Display names of the types ("ZVEI-1", ...). */
 extern const char *const tcTypeNames[TC_TYPE_COUNT];
 

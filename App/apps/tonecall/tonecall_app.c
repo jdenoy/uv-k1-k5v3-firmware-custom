@@ -66,19 +66,17 @@ static struct {
 } g;
 #define A (g.A)
 
-static const uint32_t PLACE[9] = {
-    100000000u, 10000000u, 1000000u, 100000u, 10000u, 1000u, 100u, 10u, 1u
-};
-
 /* ---- tiny formatting (no division linked) ---- */
 static uint8_t slen(const char *s){ uint8_t n=0; while(s[n]) n++; return n; }
 static char *put(char *o, const char *s){ while(*s) *o++=*s++; return o; }
-static char *putu(char *o, uint32_t v){
+/* v in decimal, at least min (1-9) digits (zero padded), at most 9: no NUL. */
+static char *putu(char *o, uint32_t v, uint8_t min){
     bool lead=true;
-    for(uint8_t i=0;i<9u;i++){
+    for(uint8_t i=TC_POW10_COUNT;i--;){
+        const uint32_t place=tcPow10[i];
         uint8_t d=0;
-        while(v>=PLACE[i]){ v-=PLACE[i]; d++; }
-        if(d||i==8u) lead=false;
+        while(v>=place&&d<9u){ v-=place; d++; }
+        if(d||i<min) lead=false;
         if(!lead) *o++=(char)('0'+d);
     }
     return o;
@@ -103,7 +101,7 @@ static bool txTone(char *s){
         uint16_t v;
         A->asset_read((uint16_t)(CTCSS+ch.tx_code*2u),&v,2u);
         *o++='C'; *o++='T';
-        char *e=putu(o,v);
+        char *e=putu(o,v,2u);                 /* "x.y" at least */
         e[1]='\0'; e[0]=e[-1]; e[-1]='.';
         return true;
     }
@@ -140,7 +138,7 @@ static void chrome(const char *title){
     A->print_tiny(APP_VERSION,(uint8_t)(6u+slen(title)*4u),1u,true,false);
     A->draw_battery();
     /* the TX frequency (10 Hz units) as MHz with 5 decimals */
-    { char *e=putu(s,A->tx_freq());
+    { char *e=putu(s,A->tx_freq(),6u);     /* 5 decimals + 1 */
       e[1]='\0';
       for(uint8_t k=0;k<5u;k++,e--) e[0]=e[-1];
       e[0]='.'; }

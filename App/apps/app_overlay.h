@@ -110,9 +110,10 @@
 #define APP_SHORTCUT_BEACON   0x04u
 #define APP_SHORTCUT_BEAM     0x08u
 #define APP_SHORTCUT_TONECALL 0x03u
-#define APP_SHORTCUT_COUNT    5u
-/* Bits of APP_OverlayShortcutMask(): 1 << position of the ID. */
-#define APP_SHORTCUT_BIT_TONECALL 0x10u
+#define APP_SHORTCUT_COUNT    5u      /* IDs known, <= 8 (bits of the mask)   */
+/* Bit of APP_OverlayShortcutMask(): 1 << position in app_shortcut_ids[]. */
+#define APP_SHORTCUT_POS_TONECALL 4u
+#define APP_SHORTCUT_BIT_TONECALL (1u << APP_SHORTCUT_POS_TONECALL)
 
 /* Optional resident facilities an app may require.  Requirements live in the
  * previously reserved header bytes, so app_header_t remains 64 bytes. */

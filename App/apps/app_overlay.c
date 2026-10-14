@@ -677,13 +677,18 @@ void APP_NotifySlotChanged(void)
     app_state.slot_revision++;
 }
 
+/* Position of a shortcut ID: its entry in shortcut_slots[] and its bit in
+ * shortcut_mask, always < APP_SHORTCUT_COUNT; -1 if unknown.  The first four
+ * positions give their IDs' own value. */
+_Static_assert(APP_SHORTCUT_COUNT == APP_SHORTCUT_POS_TONECALL + 1u &&
+               APP_SHORTCUT_COUNT <= 8u, "one shortcut_mask bit per position");
 static int8_t app_shortcut_index(uint8_t shortcut)
 {
-    if (shortcut == APP_SHORTCUT_FM)      return 0;
-    if (shortcut == APP_SHORTCUT_FOXHUNT) return 1;
-    if (shortcut == APP_SHORTCUT_BEACON)  return 2;
-    if (shortcut == APP_SHORTCUT_BEAM)    return 3;
-    if (shortcut == APP_SHORTCUT_TONECALL) return 4;
+    if (shortcut == APP_SHORTCUT_FM)       return 0;
+    if (shortcut == APP_SHORTCUT_FOXHUNT)  return 1;
+    if (shortcut == APP_SHORTCUT_BEACON)   return 2;
+    if (shortcut == APP_SHORTCUT_BEAM)     return 3;
+    if (shortcut == APP_SHORTCUT_TONECALL) return APP_SHORTCUT_POS_TONECALL;
     return -1;
 }
 
