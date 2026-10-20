@@ -143,7 +143,12 @@ calibrated RX frequency by the configured receive pitch (700 Hz by default),
 so an incoming A1A carrier is heard at that pitch. The same pitch is used for
 the local TX sidetone. Reception uses the narrowest BK4829 RF filter, 2.0 kHz
 (REG_43 `0x0058`, see `BK4819_SetFilterBandwidth` in `App/driver/bk4829.c`),
-whatever bandwidth the channel is set to. When enabled, the speaker remains open throughout RX:
+whatever bandwidth the channel is set to.
+
+Test version 1.3T (discussion #674): key `7` switches reception between the
+2.0 kHz filter and the 3.0 kHz NARROWER preset (REG_43 `0x2058`). The digit
+before the dBm reading shows the active filter (`2` or `3`). The choice is not
+saved: the app always starts at 2.0 kHz. When enabled, the speaker remains open throughout RX:
 gating it with the FM squelch clips the start of dits and chops the tone at
 every carrier transition.
 

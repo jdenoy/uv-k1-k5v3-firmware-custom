@@ -183,6 +183,7 @@ static struct {
     bool running, txReady, keyDown, denied, fArm, redraw, statusRedraw;
     bool uiHandled, help;
     bool reverse, speaker;
+    bool wideRx;   /* test build: key 7 picks the 3.0 kHz RF filter */
 #if CW_KEYER_USB
     bool portOpen, armWait;
 #endif
@@ -298,6 +299,8 @@ static void configureCwRx(bool enableAudio)
     a->asset_read(RX_PROFILE, rxProfile, sizeof(rxProfile));
     for (uint8_t i = 0u; i < RX_PROFILE_LEN / 4u; i++)
         a->bk_write((uint8_t)rxProfile[i][0], rxProfile[i][1]);
+    if (g.wideRx)
+        a->bk_write(0x43u, 0x2058u);   /* 3.0 kHz, the NARROWER preset */
     a->bk_write(REG_AFC, a->bk_read(REG_AFC) | 0x0010u);
     a->set_agc(true);
     a->set_af(AF_USB);
@@ -462,6 +465,7 @@ static void drawSmeter(void)
     const int dbm = g.smDbm;
     char s[TEXT_MAX + 5u];
     char *out = s;
+    *out++ = g.wideRx ? '3' : '2';   /* RF filter, kHz */
     if (dbm > -100)
         *out++ = ' ';
     *out++ = '-';
@@ -976,6 +980,10 @@ static void adjustSetting(uint8_t key, int8_t direction)
             A->bk_write(REG_XTAL, (uint16_t)(g.xtalBase + g.calSteps));
             retune = true;
             break;
+        case APP_KEY_7:
+            g.wideRx = !g.wideRx;
+            retune = true;
+            break;
         default:
             return;
     }
@@ -1018,7 +1026,7 @@ static void handleUiKey(uint8_t key)
             g.statusRedraw = true;
             break;
         case APP_KEY_0: case APP_KEY_1: case APP_KEY_2: case APP_KEY_3:
-        case APP_KEY_4: case APP_KEY_5: case APP_KEY_6:
+        case APP_KEY_4: case APP_KEY_5: case APP_KEY_6: case APP_KEY_7:
             adjustSetting(key, g.fArm ? -1 : 1);
             g.fArm = false;
             g.statusRedraw = true;
