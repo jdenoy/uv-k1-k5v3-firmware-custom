@@ -38,6 +38,7 @@ a.u16("RX_PROFILE", [
     0x54, 0x9009,   # audio 1
     0x55, 0x31A9,   # audio 2
     0x3D, 0x0000,   # audio filter
+    0x43, 0x0058,   # RF filter 2.0 kHz, the BK4829 minimum (bk4829.c)
 ])
 # Help page (MENU). The pack stores every text before the binary data, so
 # these come after the main-screen texts and before BMP_F.

@@ -141,7 +141,9 @@ driver, the upper-sideband demodulator, `AF_USB` in this app; unrelated to the
 radio's USB-C connector) and tunes below the
 calibrated RX frequency by the configured receive pitch (700 Hz by default),
 so an incoming A1A carrier is heard at that pitch. The same pitch is used for
-the local TX sidetone. When enabled, the speaker remains open throughout RX:
+the local TX sidetone. Reception uses the narrowest BK4829 RF filter, 2.0 kHz
+(REG_43 `0x0058`, see `BK4819_SetFilterBandwidth` in `App/driver/bk4829.c`),
+whatever bandwidth the channel is set to. When enabled, the speaker remains open throughout RX:
 gating it with the FM squelch clips the start of dits and chops the tone at
 every carrier transition.
 
