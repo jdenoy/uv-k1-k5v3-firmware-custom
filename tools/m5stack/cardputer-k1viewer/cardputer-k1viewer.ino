@@ -21,6 +21,7 @@
 #include <M5UnitGLASS.h>
 #include <M5UnitGLASS2.h>
 #include <M5Cardputer.h>
+#include <Preferences.h>
 #include <USBHost.h>
 #include <USBHostSerial.h>
 
@@ -56,6 +57,8 @@ constexpr int16_t kStatusLedRadius = 5;
 constexpr uint32_t kKeepaliveMs = 200;
 constexpr uint32_t kFpsSampleMs = 1000;
 constexpr uint32_t kUsbTxTimeoutMs = 20;
+constexpr uint32_t kLongPressMs = 500;
+constexpr uint32_t kGhostFrameMs = 40;
 constexpr uint32_t kGlassI2cFrequency = 400000;
 constexpr uint32_t kGlassFallbackI2cFrequency = 100000;
 constexpr uint8_t kGlassAddress = 0x3D;
@@ -84,6 +87,14 @@ constexpr uint8_t kKeyStar = 0x0E;
 constexpr uint8_t kKeyF = 0x0F;
 constexpr uint8_t kKeySide2 = 0x11;
 constexpr uint8_t kKeySide1 = 0x12;
+constexpr uint8_t kNoRadioKey = 0xFF;
+constexpr uint16_t kNoKeySource = 0xFFFF;
+constexpr uint8_t kGhostMaxLevel = 4;
+
+constexpr uint8_t kEffectPixel = 1u << 0;
+constexpr uint8_t kEffectInvert = 1u << 1;
+constexpr uint8_t kEffectGhost = 1u << 2;
+constexpr uint8_t kDefaultEffects = kEffectGhost;
 
 constexpr uint32_t kUiBackground = 0x111411;
 constexpr uint32_t kUiForeground = 0xF0F4EE;
@@ -109,6 +120,8 @@ enum PaletteId : uint8_t {
     PaletteGrey,
     PaletteOrange,
     PaletteBlue,
+    PaletteWhite,
+    PaletteOlive,
     PaletteCount,
 };
 
@@ -136,9 +149,12 @@ constexpr Palette kPalettes[PaletteCount] = {
     {0x2A213F, 0xE5E0EC},
     {0x41310A, 0xFFC125},
     {0x07223A, 0x1C86E4},
+    {0x000000, 0xFFFFFF},
+    {0x000000, 0x394D2D},
 };
 
 USBHostSerialClass kK1Serial;
+Preferences kPreferences;
 M5Canvas kRadioCanvas(&M5Cardputer.Display);
 M5Canvas kStatusCanvas(&M5Cardputer.Display);
 M5UnitGLASS kGlass;
@@ -147,6 +163,7 @@ M5GFX *kGlassDisplay = nullptr;
 Parser kParser;
 uint8_t kFramebuffer[kRadioFrameBytes] = {};
 uint8_t kGlassFramebuffer[kRadioFrameBytes] = {};
+uint8_t kGhostLevels[kRadioWidth * kRadioHeight] = {};
 
 bool kUsbHostStarted = false;
 bool kConnected = false;
@@ -155,17 +172,28 @@ bool kGlassFrameDirty = false;
 bool kGlassConnected = false;
 bool kGlassNeedsFullRefresh = false;
 bool kStatusDirty = true;
+bool kHeldRadioKeyLongSent = false;
+bool kPixelEffect = false;
+bool kInvertEffect = false;
+bool kGhostEffect = true;
+bool kGhostStateValid = false;
+bool kGhostAnimating = false;
+bool kPreferencesReady = false;
 GlassModel kGlassModel = GlassModel::None;
 uint8_t kFlags = 0;
 uint8_t kPalette = PaletteGrey;
+uint8_t kHeldRadioKey = kNoRadioKey;
 uint32_t kFrameCount = 0;
 uint32_t kFpsWindowFrameCount = 0;
 uint32_t kFpsWindowStart = 0;
 uint32_t kNextKeepalive = 0;
 uint32_t kNextGlassBatch = 0;
+uint32_t kHeldRadioKeyStart = 0;
+uint32_t kNextGhostFrame = 0;
 uint8_t kFps = 0;
 uint8_t kGlassTileCursor = 0;
 uint8_t kGlass2PageCursor = 0;
+uint16_t kHeldKeySource = kNoKeySource;
 
 uint16_t rgb565(uint32_t color)
 {
@@ -192,6 +220,72 @@ uint16_t inactiveColor(const Palette &palette)
     const uint8_t blue = (bgBlue * 95u + fgBlue * 5u + 50u) / 100u;
     return rgb565((static_cast<uint32_t>(red) << 16) |
                   (static_cast<uint32_t>(green) << 8) | blue);
+}
+
+uint16_t blendedColor(const Palette &palette, uint8_t foregroundPercent)
+{
+    const uint8_t backgroundPercent = 100u - foregroundPercent;
+    const uint8_t bgRed = (palette.background >> 16) & 0xFF;
+    const uint8_t bgGreen = (palette.background >> 8) & 0xFF;
+    const uint8_t bgBlue = palette.background & 0xFF;
+    const uint8_t fgRed = (palette.foreground >> 16) & 0xFF;
+    const uint8_t fgGreen = (palette.foreground >> 8) & 0xFF;
+    const uint8_t fgBlue = palette.foreground & 0xFF;
+
+    const uint8_t red =
+        (bgRed * backgroundPercent + fgRed * foregroundPercent + 50u) / 100u;
+    const uint8_t green =
+        (bgGreen * backgroundPercent + fgGreen * foregroundPercent + 50u) /
+        100u;
+    const uint8_t blue =
+        (bgBlue * backgroundPercent + fgBlue * foregroundPercent + 50u) /
+        100u;
+    return rgb565((static_cast<uint32_t>(red) << 16) |
+                  (static_cast<uint32_t>(green) << 8) | blue);
+}
+
+void syncGhostState()
+{
+    for (uint16_t bitIndex = 0; bitIndex < kRadioWidth * kRadioHeight;
+         ++bitIndex) {
+        const bool pixelOn =
+            (kFramebuffer[bitIndex >> 3] & (1u << (bitIndex & 7u))) != 0;
+        kGhostLevels[bitIndex] = pixelOn ? kGhostMaxLevel : 0;
+    }
+    kGhostStateValid = true;
+    kGhostAnimating = false;
+}
+
+uint8_t displayEffects()
+{
+    return (kPixelEffect ? kEffectPixel : 0u) |
+           (kInvertEffect ? kEffectInvert : 0u) |
+           (kGhostEffect ? kEffectGhost : 0u);
+}
+
+void saveDisplayEffects()
+{
+    if (kPreferencesReady) {
+        kPreferences.putUChar("effects", displayEffects());
+    }
+}
+
+void loadDisplaySettings()
+{
+    kPreferencesReady = kPreferences.begin("k1viewer", false);
+    if (!kPreferencesReady) {
+        return;
+    }
+
+    const uint8_t palette =
+        kPreferences.getUChar("palette", PaletteGrey);
+    kPalette = palette < PaletteCount ? palette : PaletteGrey;
+
+    const uint8_t effects =
+        kPreferences.getUChar("effects", kDefaultEffects);
+    kPixelEffect = (effects & kEffectPixel) != 0;
+    kInvertEffect = (effects & kEffectInvert) != 0;
+    kGhostEffect = (effects & kEffectGhost) != 0;
 }
 
 void resetParser()
@@ -318,30 +412,80 @@ void pushParser(uint8_t byte)
     }
 }
 
-void renderRadio()
+void renderRadio(uint32_t now)
 {
-    const Palette &palette = kPalettes[kPalette];
-    const uint16_t foreground = rgb565(palette.foreground);
-    const uint16_t inactive = inactiveColor(palette);
+    Palette palette = kPalettes[kPalette];
+    if (kInvertEffect) {
+        const uint32_t foreground = palette.foreground;
+        palette.foreground = palette.background;
+        palette.background = foreground;
+    }
 
-    kRadioCanvas.fillSprite(inactive);
+    const uint16_t foreground = rgb565(palette.foreground);
+    const uint16_t background = rgb565(palette.background);
+    const uint16_t inactive = inactiveColor(palette);
+    uint16_t ghostColors[kGhostMaxLevel + 1] = {};
+    for (uint8_t level = 1; level <= kGhostMaxLevel; ++level) {
+        ghostColors[level] = blendedColor(
+            palette, static_cast<uint8_t>(level * 100u / kGhostMaxLevel));
+    }
+
+    if (kGhostEffect && !kGhostStateValid) {
+        syncGhostState();
+    }
+
+    kRadioCanvas.fillSprite(kPixelEffect ? background : inactive);
+    bool ghostAnimating = false;
     for (uint16_t y = 0; y < kRadioHeight; ++y) {
         const int16_t top = (y * kViewHeight) / kRadioHeight;
         const int16_t bottom = ((y + 1) * kViewHeight) / kRadioHeight;
         for (uint16_t x = 0; x < kRadioWidth; ++x) {
             const uint16_t bitIndex = y * kRadioWidth + x;
-            if ((kFramebuffer[bitIndex >> 3] &
-                 (1u << (bitIndex & 7u))) == 0) {
+            const bool pixelOn =
+                (kFramebuffer[bitIndex >> 3] &
+                 (1u << (bitIndex & 7u))) != 0;
+            uint8_t level = pixelOn ? kGhostMaxLevel : 0;
+
+            if (kGhostEffect) {
+                level = kGhostLevels[bitIndex];
+                if (pixelOn && level < kGhostMaxLevel) {
+                    level = static_cast<uint8_t>(
+                        level + 2u > kGhostMaxLevel
+                            ? kGhostMaxLevel
+                            : level + 2u);
+                } else if (!pixelOn && level > 0) {
+                    --level;
+                }
+                kGhostLevels[bitIndex] = level;
+                ghostAnimating |=
+                    level != (pixelOn ? kGhostMaxLevel : 0u);
+            }
+
+            if (level == 0) {
                 continue;
             }
 
             const int16_t left = (x * kViewWidth) / kRadioWidth;
             const int16_t right = ((x + 1) * kViewWidth) / kRadioWidth;
-            kRadioCanvas.fillRect(left, top, right - left, bottom - top,
-                                  foreground);
+            int16_t width = right - left;
+            int16_t height = bottom - top;
+            if (kPixelEffect) {
+                if (width > 1) {
+                    --width;
+                }
+                if (height > 1) {
+                    --height;
+                }
+            }
+            kRadioCanvas.fillRect(left, top, width, height,
+                                  level == kGhostMaxLevel
+                                      ? foreground
+                                      : ghostColors[level]);
         }
     }
     kRadioCanvas.pushSprite(kViewX, kViewY);
+    kGhostAnimating = kGhostEffect && ghostAnimating;
+    kNextGhostFrame = now + kGhostFrameMs;
     kFrameDirty = false;
 }
 
@@ -676,6 +820,36 @@ void selectPalette(uint8_t palette)
 
     kPalette = palette;
     kFrameDirty = true;
+    if (kPreferencesReady) {
+        kPreferences.putUChar("palette", kPalette);
+    }
+}
+
+void togglePixelEffect()
+{
+    kPixelEffect = !kPixelEffect;
+    kFrameDirty = true;
+    saveDisplayEffects();
+}
+
+void toggleInvertEffect()
+{
+    kInvertEffect = !kInvertEffect;
+    kFrameDirty = true;
+    saveDisplayEffects();
+}
+
+void toggleGhostEffect()
+{
+    kGhostEffect = !kGhostEffect;
+    if (kGhostEffect) {
+        syncGhostState();
+    } else {
+        kGhostStateValid = false;
+        kGhostAnimating = false;
+    }
+    kFrameDirty = true;
+    saveDisplayEffects();
 }
 
 void sendRadioKey(uint8_t keyCode, bool longPress)
@@ -735,15 +909,80 @@ bool handleRadioKey(uint8_t rawKey, bool longPress)
     case KEY_ENTER:
         sendRadioKey(kKeyMenu, longPress);
         return true;
+    case '`':
     case KEY_BACKSPACE:
         sendRadioKey(kKeyExit, longPress);
         return true;
     case 'f':
+    case '-':
         sendRadioKey(kKeyF, longPress);
+        return true;
+    case '=':
+        sendRadioKey(kKeyStar, longPress);
+        return true;
+    case ',':
+    case ';':
+        sendRadioKey(kKeyUp, longPress);
+        return true;
+    case '.':
+    case '/':
+        sendRadioKey(kKeyDown, longPress);
         return true;
     default:
         return false;
     }
+}
+
+uint8_t mapRadioKey(uint8_t rawKey)
+{
+    if (rawKey >= '0' && rawKey <= '9') {
+        return rawKey - '0';
+    }
+
+    switch (rawKey) {
+    case 'm':
+    case KEY_ENTER:
+        return kKeyMenu;
+    case '`':
+    case KEY_BACKSPACE:
+        return kKeyExit;
+    case 'f':
+    case '-':
+        return kKeyF;
+    case '=':
+        return kKeyStar;
+    case ',':
+    case ';':
+        return kKeyUp;
+    case '.':
+    case '/':
+        return kKeyDown;
+    default:
+        return kNoRadioKey;
+    }
+}
+
+void clearHeldRadioKey()
+{
+    kHeldRadioKey = kNoRadioKey;
+    kHeldKeySource = kNoKeySource;
+    kHeldRadioKeyLongSent = false;
+}
+
+void finishHeldRadioKey()
+{
+    if (kHeldRadioKey != kNoRadioKey && !kHeldRadioKeyLongSent) {
+        sendRadioKey(kHeldRadioKey, false);
+    }
+    clearHeldRadioKey();
+}
+
+void startHeldRadioKey(uint16_t source, uint8_t keyCode)
+{
+    kHeldKeySource = source;
+    kHeldRadioKey = keyCode;
+    kHeldRadioKeyStart = millis();
+    kHeldRadioKeyLongSent = false;
 }
 
 void updateInput()
@@ -754,13 +993,51 @@ void updateInput()
         selectPalette((kPalette + 1u) % PaletteCount);
     }
 
-    if (!M5Cardputer.Keyboard.isChange() ||
-        !M5Cardputer.Keyboard.isPressed()) {
+    if (kHeldRadioKey != kNoRadioKey && !kHeldRadioKeyLongSent &&
+        millis() - kHeldRadioKeyStart >= kLongPressMs) {
+        sendRadioKey(kHeldRadioKey, true);
+        kHeldRadioKeyLongSent = true;
+    }
+
+    if (!M5Cardputer.Keyboard.isChange()) {
+        return;
+    }
+
+    if (!M5Cardputer.Keyboard.isPressed()) {
+        finishHeldRadioKey();
         return;
     }
 
     Keyboard_Class::KeysState &state = M5Cardputer.Keyboard.keysState();
-    for (const Point2D_t &position : M5Cardputer.Keyboard.keyList()) {
+    const auto &keys = M5Cardputer.Keyboard.keyList();
+
+    if (state.fn && keys.size() == 1u) {
+        if (kHeldKeySource == kNoKeySource) {
+            startHeldRadioKey(KEY_FN, kKeyF);
+        }
+        return;
+    }
+
+    if (state.fn && kHeldKeySource == KEY_FN) {
+        clearHeldRadioKey();
+    }
+
+    if (kHeldKeySource != kNoKeySource) {
+        bool sourceStillPressed = false;
+        for (const Point2D_t &position : keys) {
+            const uint8_t rawKey =
+                M5Cardputer.Keyboard.getKeyValue(position).value_first;
+            if (rawKey == kHeldKeySource) {
+                sourceStillPressed = true;
+                break;
+            }
+        }
+        if (!sourceStillPressed) {
+            finishHeldRadioKey();
+        }
+    }
+
+    for (const Point2D_t &position : keys) {
         const uint8_t rawKey =
             M5Cardputer.Keyboard.getKeyValue(position).value_first;
 
@@ -771,10 +1048,27 @@ void updateInput()
         }
 
         if (state.fn && handleFnRadioKey(rawKey, state.shift)) {
+            clearHeldRadioKey();
+            kHeldKeySource = rawKey;
+            kHeldRadioKeyLongSent = true;
             continue;
         }
 
-        if (!state.fn && handleRadioKey(rawKey, state.shift)) {
+        const uint8_t radioKey = state.fn ? kNoRadioKey
+                                          : mapRadioKey(rawKey);
+        if (radioKey != kNoRadioKey) {
+            if (kHeldKeySource == rawKey) {
+                continue;
+            }
+            if (kHeldKeySource != kNoKeySource) {
+                continue;
+            }
+
+            startHeldRadioKey(rawKey, radioKey);
+            if (state.shift) {
+                handleRadioKey(rawKey, true);
+                kHeldRadioKeyLongSent = true;
+            }
             continue;
         }
 
@@ -784,6 +1078,16 @@ void updateInput()
             selectPalette(PaletteOrange);
         } else if (!state.fn && rawKey == 'b') {
             selectPalette(PaletteBlue);
+        } else if (!state.fn && rawKey == 'w') {
+            selectPalette(PaletteWhite);
+        } else if (!state.fn && rawKey == 'x') {
+            selectPalette(PaletteOlive);
+        } else if (!state.fn && rawKey == 'p') {
+            togglePixelEffect();
+        } else if (!state.fn && rawKey == 'i') {
+            toggleInvertEffect();
+        } else if (!state.fn && rawKey == 'k') {
+            toggleGhostEffect();
         }
     }
 }
@@ -795,6 +1099,7 @@ void setup()
     auto config = M5.config();
     config.external_display_value = 0;
     M5Cardputer.begin(config, true);
+    loadDisplaySettings();
     M5Cardputer.Display.setRotation(1);
     M5Cardputer.Display.setBrightness(128);
     M5Cardputer.Display.fillScreen(rgb565(kUiBackground));
@@ -858,8 +1163,12 @@ void loop()
     updateInput();
     updateFps(now);
 
+    if (kGhostEffect && kGhostAnimating &&
+        static_cast<int32_t>(now - kNextGhostFrame) >= 0) {
+        kFrameDirty = true;
+    }
     if (kFrameDirty) {
-        renderRadio();
+        renderRadio(now);
     }
     renderGlass(now);
     if (kStatusDirty) {

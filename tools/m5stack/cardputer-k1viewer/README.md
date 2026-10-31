@@ -102,20 +102,26 @@ ambiguous and is not supported.
 
 | Cardputer key | K1 action |
 | --- | --- |
-| `M` or Enter | MENU / confirm |
-| Backspace or `Fn` + backtick | EXIT / back |
+| `M` or Enter / OK | MENU / confirm |
+| Backtick or Backspace / DEL | EXIT / back |
 | `0` to `9` | Radio digit |
-| `F` | F / `#` key |
+| `F`, `-`, or `Fn` alone | F / `#` key |
+| `=` | `*` / scan |
+| `,` (left) or `;` (up) | Increase / K1 up |
+| `/` (right) or `.` (down) | Decrease / K1 down |
 | `Fn` + `1` | SIDE1 |
 | `Fn` + `2` | SIDE2 |
 | `Fn` + `3` | F / `#` key |
 | `Fn` + `8` | `*` key |
-| `Fn` + `;` or `Fn` + `,` | Up / K1 left |
-| `Fn` + `.` or `Fn` + `/` | Down / K1 right |
+| `G`, `O`, `B`, `W`, or `X` | Grey, orange, blue, white, or olive display |
+| `P` | Toggle the pixelated LCD effect |
+| `I` | Invert the display colors |
+| `K` | Toggle LCD ghosting |
+| G0 / BtnA | Cycle through the five display palettes |
 
-Hold **Shift** with a mapped radio key to send a long press. The `G`, `O`, and
-`B` keys select the grey, orange, and blue palettes locally. **G0/BtnA** cycles
-through the same three palettes.
+Hold a mapped radio key for 500 ms to send a long press. **Shift** still sends
+the long press immediately. Display palette, pixel effect, inversion, and
+ghosting settings are saved in flash and restored after a power cycle.
 
 Cardputer Adv compatibility is not claimed until it has been validated on
 real hardware.
